@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="uploadfirmware">Firmware Update\nHex-File</string>
+    <string name="uploadmapfile">Navigation-File</string>
+    <string name="uploadconfigfile">Config-File</string>
+    <string name="uploadgfxfile">Graphic-File</string>
+    <string name="hello">Hello World, SpeedoAndroidActivity!</string>
+    <string name="app_name">SpeedoAndroid</string>
+    <string name="checkVersion">Check Version</string>
+    <string name="version_cap">Version:</string>
+    <string name="connect">connect</string>
+    <string name="version_value">X</string>
+    <string name="status_cap">Status:</string>
+    <string name="status_value">use menu to connect</string>
+    <string name="title_paired_devices">Paired devices</string>
+    <string name="button_scan">Scan</string>
+    <string name="bindestrich">-</string>
+    <string name="title_other_devices">Other devices</string>
+    <string name="none_paired">None paired</string>
+    <string name="none_found">None found</string>
+    <string name="scanning">scanning...</string>
+    <string name="Settings">Settings</string>
+    <string name="unknown">unknown command</string>
+    <string name="select_device">Select device</string>
+    <string name="no_selected_file">No file selected</string>
+    <string name="push_back_twice">Push back again to leave</string>
+    <string name="delete_file">Deleting file...</string>
+    <string name="PrevImageConverter">Previous</string>
+    <string name="NextImageConverter">Save/Next</string>
+    <string name="mapEditorCaption">Please set direction and description</string>
+    <string name="MySettingsTitle">Settings</string>
+    <string name="MapEditor">Recorded GPS Route</string>
+    <string name="cancle">Cancel</string>
+    <string name="ImageEditor">ImageConverter</string>
+    <string name="SaveImageConverter">Upload</string>
+    <string name="DiscardImageConverter">Discard</string>
+    <string name="disconnect">disconnect</string>
+    <string name="not_connected">not connected</string>
+    <string name="bt_not_enabled_leaving">Bluetooth not enabled</string>
+    <string name="log_value">please connect</string>
+    <string name="log_cap">Last command:</string>
+    <string name="left">←</string>
+    <string name="right">→</string>
+    <string name="up">↑</string>
+    <string name="down">↓</string>
+    <string name="Download">Download</string>
+    <string name="Delete">Delete</string>
+    <string name="Select_file">Select file</string>
+    <string name="location">Location</string>
+    <string name="filter">Filter</string>
+    <string name="cant_read_folder">folder can\'t be read!</string>
+    <string name="nnew">New</string>
+    <string name="select">Select</string>
+    <string name="file_name">File name:</string>
+    <string name="cancel">Cancel</string>
+    <string name="create">Save</string>
+    <string name="no_data">No Data</string>
+    <string name="StopAnimation">Stop</string>
+    <string name="RunAnimation">Play</string>
+
+    <color name="gray">#ffff0000</color>
+
+    <string name="RemoveMapConverter">Remove</string>
+    <string name="noresponse">No response from target</string>
+    <string name="straight_on">↑</string>
+    <string name="interprete_this">help me interprete this</string>
+    <string name="MapView">MapView</string>
+    <string name="RouteMap">Show captured\nSpeedoino Map</string>
+    <string name="SkinEdit">Open SkinEditor</string>
+    <string name="SkinEditor_previewTitle">Preview | Tab to zoom</string>
+
+    <string-array name="scale_values">
+        <item>Scale</item>
+        <item>Scale with aspect ratio</item>
+        <item>Crop center</item>
+    </string-array>
+    <string-array name="color_invert_values">
+        <item>Regular colors</item>
+        <item>Inverted colors</item>
+    </string-array>
+    <string-array name="background_color_values">
+        <item>Auto</item>
+        <item>Black</item>
+        <item>White</item>
+    </string-array>
+    <string-array name="upload_context_menu">
+        <item>Play</item>
+        <item>Play with custom speed</item>
+        <item>Set as Startup</item>
+        <item>Set as Startup with custom speed</item>
+    </string-array>
+    
+    
+    <string-array name="skin_sensor_array">
+        <item>KM/H</item>
+        <item>KM/H label</item>
+        <item>Oil</item>
+        <item>Water</item>
+        <item>Air</item>
+        <item>RPM</item>
+        <item>Arrow</item>
+        <item>Add Info</item>
+        <item>Add Info II</item>
+        <item>GPS</item>
+        <item>Fuel</item>
+        <item>Gear</item>
+        <item>Clock</item>
+    </string-array>
+    
+    
+    <string-array name="skin_font_array">
+        <item>STD_SMALL_1X_FONT</item>
+        <item>STD_SMALL_2X_FONT</item>
+        <item>STD_SMALL_3X_FONT</item>
+        <item>STD_SMALL_4X_FONT</item>
+        <item>SANS_SMALL_1X_FONT</item>
+        <item>SANS_SMALL_2X_FONT</item>
+        <item>SANS_SMALL_3X_FONT</item>
+        <item>SANS_SMALL_4X_FONT</item>
+        <item>SANS_BIG_1X_FONT</item>
+        <item>VISITOR_SMALL_1X_FONT</item>
+        <item>VISITOR_SMALL_2X_FONT</item>
+        <item>VISITOR_SMALL_3X_FONT</item>
+        <item>VISITOR_SMALL_4X_FONT</item>
+    </string-array>
+
+</resources>

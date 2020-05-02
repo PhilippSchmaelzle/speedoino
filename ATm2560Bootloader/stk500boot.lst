@@ -1,0 +1,3976 @@
+   1               		.file	"stk500boot.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__RAMPZ__ = 0x3b
+   6               	__tmp_reg__ = 0
+   7               	__zero_reg__ = 1
+   8               		.text
+   9               	.Ltext0:
+  11               	sendchar:
+  12               	.LFB9:
+  13               		.file 1 "stk500boot.c"
+   1:stk500boot.c  **** 
+   2:stk500boot.c  **** /*****************************************************************************
+   3:stk500boot.c  **** Title:     STK500v2 compatible bootloader
+   4:stk500boot.c  ****            Modified for Wiring board ATMega128-16MHz
+   5:stk500boot.c  **** Author:    Peter Fleury <pfleury@gmx.ch>   http://jump.to/fleury
+   6:stk500boot.c  **** File:      $Id: stk500boot.c,v 1.11 2006/06/25 12:39:17 peter Exp $
+   7:stk500boot.c  **** Compiler:  avr-gcc 3.4.5 or 4.1 / avr-libc 1.4.3
+   8:stk500boot.c  **** Hardware:  All AVRs with bootloader support, tested with ATmega8
+   9:stk500boot.c  **** License:   GNU General Public License
+  10:stk500boot.c  **** 
+  11:stk500boot.c  **** Modified:  Worapoht Kornkaewwattanakul <dev@avride.com>   http://www.avride.com
+  12:stk500boot.c  **** Date:      17 October 2007
+  13:stk500boot.c  **** Update:    1st, 29 Dec 2007 : Enable CMD_SPI_MULTI but ignore unused command by return 0x00 byte re
+  14:stk500boot.c  **** Compiler:  WINAVR20060421
+  15:stk500boot.c  **** Description: add timeout feature like previous Wiring bootloader
+  16:stk500boot.c  **** 
+  17:stk500boot.c  **** DESCRIPTION:
+  18:stk500boot.c  ****     This program allows an AVR with bootloader capabilities to
+  19:stk500boot.c  ****     read/write its own Flash/EEprom. To enter Programming mode
+  20:stk500boot.c  ****     an input pin is checked. If this pin is pulled low, programming mode
+  21:stk500boot.c  ****     is entered. If not, normal execution is done from $0000
+  22:stk500boot.c  ****     "reset" vector in Application area.
+  23:stk500boot.c  ****     Size fits into a 1024 word bootloader section
+  24:stk500boot.c  **** 	when compiled with avr-gcc 4.1
+  25:stk500boot.c  **** 	(direct replace on Wiring Board without fuse setting changed)
+  26:stk500boot.c  **** 
+  27:stk500boot.c  **** USAGE:
+  28:stk500boot.c  ****     - Set AVR MCU type and clock-frequency (F_CPU) in the Makefile.
+  29:stk500boot.c  ****     - Set baud rate below (AVRISP only works with 115200 bps)
+  30:stk500boot.c  ****     - compile/link the bootloader with the supplied Makefile
+  31:stk500boot.c  ****     - program the "Boot Flash section size" (BOOTSZ fuses),
+  32:stk500boot.c  ****       for boot-size 1024 words:  program BOOTSZ01
+  33:stk500boot.c  ****     - enable the BOOT Reset Vector (program BOOTRST)
+  34:stk500boot.c  ****     - Upload the hex file to the AVR using any ISP programmer
+  35:stk500boot.c  ****     - Program Boot Lock Mode 3 (program BootLock 11 and BootLock 12 lock bits) // (leave them)
+  36:stk500boot.c  ****     - Reset your AVR while keeping PROG_PIN pulled low // (for enter bootloader by switch)
+  37:stk500boot.c  ****     - Start AVRISP Programmer (AVRStudio/Tools/Program AVR)
+  38:stk500boot.c  ****     - AVRISP will detect the bootloader
+  39:stk500boot.c  ****     - Program your application FLASH file and optional EEPROM file using AVRISP
+  40:stk500boot.c  **** 
+  41:stk500boot.c  **** Note:
+  42:stk500boot.c  ****     Erasing the device without flashing, through AVRISP GUI button "Erase Device"
+  43:stk500boot.c  ****     is not implemented, due to AVRStudio limitations.
+  44:stk500boot.c  ****     Flash is always erased before programming.
+  45:stk500boot.c  **** 
+  46:stk500boot.c  **** 	AVRdude:
+  47:stk500boot.c  **** 	Please uncomment #define REMOVE_CMD_SPI_MULTI when using AVRdude.
+  48:stk500boot.c  **** 	Comment #define REMOVE_PROGRAM_LOCK_BIT_SUPPORT to reduce code size
+  49:stk500boot.c  **** 	Read Fuse Bits and Read/Write Lock Bits is not supported
+  50:stk500boot.c  **** 
+  51:stk500boot.c  **** NOTES:
+  52:stk500boot.c  ****     Based on Atmel Application Note AVR109 - Self-programming
+  53:stk500boot.c  ****     Based on Atmel Application Note AVR068 - STK500v2 Protocol
+  54:stk500boot.c  **** 
+  55:stk500boot.c  **** LICENSE:
+  56:stk500boot.c  ****     Copyright (C) 2006 Peter Fleury
+  57:stk500boot.c  **** 
+  58:stk500boot.c  ****     This program is free software; you can redistribute it and/or modify
+  59:stk500boot.c  ****     it under the terms of the GNU General Public License as published by
+  60:stk500boot.c  ****     the Free Software Foundation; either version 2 of the License, or
+  61:stk500boot.c  ****     any later version.
+  62:stk500boot.c  **** 
+  63:stk500boot.c  ****     This program is distributed in the hope that it will be useful,
+  64:stk500boot.c  ****     but WITHOUT ANY WARRANTY; without even the implied warranty of
+  65:stk500boot.c  ****     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  66:stk500boot.c  ****     GNU General Public License for more details.
+  67:stk500boot.c  **** 
+  68:stk500boot.c  ****  *****************************************************************************/
+  69:stk500boot.c  **** 
+  70:stk500boot.c  **** //************************************************************************
+  71:stk500boot.c  **** //*	Edit History
+  72:stk500boot.c  **** //************************************************************************
+  73:stk500boot.c  **** //*	Jul  7,	2010	<MLS> = Mark Sproul msproul@skycharoit.com
+  74:stk500boot.c  **** //*	Jul  7,	2010	<MLS> Working on mega2560. No Auto-restart
+  75:stk500boot.c  **** //*	Jul  7,	2010	<MLS> Switched to 8K bytes (4K words) so that we have room for the monitor
+  76:stk500boot.c  **** //*	Jul  8,	2010	<MLS> Found older version of source that had auto restart, put that code back in
+  77:stk500boot.c  **** //*	Jul  8,	2010	<MLS> Adding monitor code
+  78:stk500boot.c  **** //*	Jul 11,	2010	<MLS> Added blinking LED while waiting for download to start
+  79:stk500boot.c  **** //*	Jul 11,	2010	<MLS> Added EEPROM test
+  80:stk500boot.c  **** //*	Jul 29,	2010	<MLS> Added recchar_timeout for timing out on bootloading
+  81:stk500boot.c  **** //*	Aug 23,	2010	<MLS> Added support for atmega2561
+  82:stk500boot.c  **** //*	Aug 26,	2010	<MLS> Removed support for BOOT_BY_SWITCH
+  83:stk500boot.c  **** //************************************************************************
+  84:stk500boot.c  **** 
+  85:stk500boot.c  **** 
+  86:stk500boot.c  **** 
+  87:stk500boot.c  **** #include	<inttypes.h>
+  88:stk500boot.c  **** #include	<avr/io.h>
+  89:stk500boot.c  **** #include	<avr/interrupt.h>
+  90:stk500boot.c  **** #include	<avr/boot.h>
+  91:stk500boot.c  **** #include	<avr/pgmspace.h>
+  92:stk500boot.c  **** #include	<util/delay.h>
+  93:stk500boot.c  **** #include	<avr/eeprom.h>
+  94:stk500boot.c  **** #include	<avr/common.h>
+  95:stk500boot.c  **** #include	<stdlib.h>
+  96:stk500boot.c  **** #include	"command.h"
+  97:stk500boot.c  **** #include	"display.h"
+  98:stk500boot.c  **** #include   "logo.h"
+  99:stk500boot.c  **** 
+ 100:stk500boot.c  **** 
+ 101:stk500boot.c  **** #ifndef EEWE
+ 102:stk500boot.c  **** #define EEWE 1
+ 103:stk500boot.c  **** #endif
+ 104:stk500boot.c  **** #ifndef EEMWE
+ 105:stk500boot.c  **** #define EEMWE 2
+ 106:stk500boot.c  **** #endif
+ 107:stk500boot.c  **** 
+ 108:stk500boot.c  **** //#define	_DEBUG_SERIAL_
+ 109:stk500boot.c  **** 
+ 110:stk500boot.c  **** /*
+ 111:stk500boot.c  ****  * Uncomment the following lines to save code space
+ 112:stk500boot.c  ****  */
+ 113:stk500boot.c  **** //#define	REMOVE_PROGRAM_LOCK_BIT_SUPPORT		// disable program lock bits
+ 114:stk500boot.c  **** //
+ 115:stk500boot.c  **** 
+ 116:stk500boot.c  **** /*
+ 117:stk500boot.c  ****  * define CPU frequency in Mhz here if not defined in Makefile
+ 118:stk500boot.c  ****  */
+ 119:stk500boot.c  **** #ifndef F_CPU
+ 120:stk500boot.c  **** #define F_CPU 16000000UL
+ 121:stk500boot.c  **** #endif
+ 122:stk500boot.c  **** 
+ 123:stk500boot.c  **** /*
+ 124:stk500boot.c  ****  * UART Baudrate, AVRStudio AVRISP only accepts 115200 bps
+ 125:stk500boot.c  ****  */
+ 126:stk500boot.c  **** 
+ 127:stk500boot.c  **** #ifndef BAUDRATE
+ 128:stk500boot.c  **** #define BAUDRATE 115200
+ 129:stk500boot.c  **** #endif
+ 130:stk500boot.c  **** 
+ 131:stk500boot.c  **** /*
+ 132:stk500boot.c  ****  *  Enable (1) or disable (0) USART double speed operation
+ 133:stk500boot.c  ****  */
+ 134:stk500boot.c  **** #define UART_BAUDRATE_DOUBLE_SPEED 1
+ 135:stk500boot.c  **** /*
+ 136:stk500boot.c  ****  * HW and SW version, reported to AVRISP, must match version of AVRStudio
+ 137:stk500boot.c  ****  */
+ 138:stk500boot.c  **** #define CONFIG_PARAM_BUILD_NUMBER_LOW	0
+ 139:stk500boot.c  **** #define CONFIG_PARAM_BUILD_NUMBER_HIGH	0
+ 140:stk500boot.c  **** #define CONFIG_PARAM_HW_VER				0x0F
+ 141:stk500boot.c  **** #define CONFIG_PARAM_SW_MAJOR			2
+ 142:stk500boot.c  **** #define CONFIG_PARAM_SW_MINOR			0x0A
+ 143:stk500boot.c  **** 
+ 144:stk500boot.c  **** /*
+ 145:stk500boot.c  ****  * Calculate the address where the bootloader starts from FLASHEND and BOOTSIZE
+ 146:stk500boot.c  ****  * (adjust BOOTSIZE below and BOOTLOADER_ADDRESS in Makefile if you want to change the size of the 
+ 147:stk500boot.c  ****  */
+ 148:stk500boot.c  **** //#define BOOTSIZE 1024
+ 149:stk500boot.c  **** #if FLASHEND > 0x0F000
+ 150:stk500boot.c  **** #define BOOTSIZE 8192
+ 151:stk500boot.c  **** #else
+ 152:stk500boot.c  **** #define BOOTSIZE 2048
+ 153:stk500boot.c  **** #endif
+ 154:stk500boot.c  **** 
+ 155:stk500boot.c  **** #define APP_END  (FLASHEND -(2*BOOTSIZE) + 1)
+ 156:stk500boot.c  **** 
+ 157:stk500boot.c  **** /*
+ 158:stk500boot.c  ****  * Signature bytes are not available in avr-gcc io_xxx.h
+ 159:stk500boot.c  ****  */
+ 160:stk500boot.c  **** #define SIGNATURE_BYTES 0x1E9801
+ 161:stk500boot.c  **** 
+ 162:stk500boot.c  **** 
+ 163:stk500boot.c  **** /* ATMega with two USART, use UART0 */
+ 164:stk500boot.c  **** #define	UART_BAUD_RATE_LOW			UBRR0L
+ 165:stk500boot.c  **** #define	UART_STATUS_REG				UCSR0A
+ 166:stk500boot.c  **** #define	UART_CONTROL_REG			UCSR0B
+ 167:stk500boot.c  **** #define	UART_ENABLE_TRANSMITTER		TXEN0
+ 168:stk500boot.c  **** #define	UART_ENABLE_RECEIVER		RXEN0
+ 169:stk500boot.c  **** #define	UART_TRANSMIT_COMPLETE		TXC0
+ 170:stk500boot.c  **** #define	UART_RECEIVE_COMPLETE		RXC0
+ 171:stk500boot.c  **** #define	UART_DATA_REG				UDR0
+ 172:stk500boot.c  **** #define	UART_DOUBLE_SPEED			U2X0
+ 173:stk500boot.c  **** 
+ 174:stk500boot.c  **** 
+ 175:stk500boot.c  **** 
+ 176:stk500boot.c  **** /*
+ 177:stk500boot.c  ****  * Macro to calculate UBBR from XTAL and baudrate
+ 178:stk500boot.c  ****  */
+ 179:stk500boot.c  **** #define UART_BAUD_SELECT(baudRate,xtalCpu) (((float)(xtalCpu))/(((float)(baudRate))*8.0)-1.0+0.5)
+ 180:stk500boot.c  **** 
+ 181:stk500boot.c  **** 
+ 182:stk500boot.c  **** /*
+ 183:stk500boot.c  ****  * States used in the receive state machine
+ 184:stk500boot.c  ****  */
+ 185:stk500boot.c  **** #define	ST_START		0
+ 186:stk500boot.c  **** #define	ST_GET_SEQ_NUM	1
+ 187:stk500boot.c  **** #define ST_MSG_SIZE_1	2
+ 188:stk500boot.c  **** #define ST_MSG_SIZE_2	3
+ 189:stk500boot.c  **** #define ST_GET_TOKEN	4
+ 190:stk500boot.c  **** #define ST_GET_DATA		5
+ 191:stk500boot.c  **** #define	ST_GET_CHECK	6
+ 192:stk500boot.c  **** #define	ST_PROCESS		7
+ 193:stk500boot.c  **** 
+ 194:stk500boot.c  **** /*
+ 195:stk500boot.c  ****  * use 16bit address variable for ATmegas with <= 64K flash
+ 196:stk500boot.c  ****  */
+ 197:stk500boot.c  **** #if defined(RAMPZ)
+ 198:stk500boot.c  **** typedef uint32_t address_t;
+ 199:stk500boot.c  **** #else
+ 200:stk500boot.c  **** typedef uint16_t address_t;
+ 201:stk500boot.c  **** #endif
+ 202:stk500boot.c  **** 
+ 203:stk500boot.c  **** /*
+ 204:stk500boot.c  ****  * function prototypes
+ 205:stk500boot.c  ****  */
+ 206:stk500boot.c  **** static void sendchar(char c);
+ 207:stk500boot.c  **** 
+ 208:stk500boot.c  **** /*
+ 209:stk500boot.c  ****  * since this bootloader is not linked against the avr-gcc crt1 functions,
+ 210:stk500boot.c  ****  * to reduce the code size, we need to provide our own initialization
+ 211:stk500boot.c  ****  */
+ 212:stk500boot.c  **** void __jumpMain	(void) __attribute__ ((naked)) __attribute__ ((section (".init9")));
+ 213:stk500boot.c  **** #include <avr/sfr_defs.h>
+ 214:stk500boot.c  **** 
+ 215:stk500boot.c  **** //#define	SPH_REG	0x3E
+ 216:stk500boot.c  **** //#define	SPL_REG	0x3D
+ 217:stk500boot.c  **** 
+ 218:stk500boot.c  **** //*****************************************************************************
+ 219:stk500boot.c  **** void __jumpMain(void)
+ 220:stk500boot.c  **** {
+ 221:stk500boot.c  **** 	//*	July 17, 2010	<MLS> Added stack pointer initialzation
+ 222:stk500boot.c  **** 	//*	the first line did not do the job on the ATmega128
+ 223:stk500boot.c  **** 
+ 224:stk500boot.c  **** 	asm volatile ( ".set __stack, %0" :: "i" (RAMEND) );
+ 225:stk500boot.c  **** 
+ 226:stk500boot.c  **** 	asm volatile ( "ldi	16, %0" :: "i" (RAMEND >> 8) );
+ 227:stk500boot.c  **** 	asm volatile ( "out %0,16" :: "i" (AVR_STACK_POINTER_HI_ADDR) );
+ 228:stk500boot.c  **** 	asm volatile ( "ldi	16, %0" :: "i" (RAMEND & 0x0ff) );
+ 229:stk500boot.c  **** 	asm volatile ( "out %0,16" :: "i" (AVR_STACK_POINTER_LO_ADDR) );
+ 230:stk500boot.c  **** 	asm volatile ( "clr __zero_reg__" );									// GCC depends on register r1 set to 0
+ 231:stk500boot.c  **** 	asm volatile ( "out %0, __zero_reg__" :: "I" (_SFR_IO_ADDR(SREG)) );	// set SREG to 0
+ 232:stk500boot.c  **** 	asm volatile ( "jmp main");												// jump to main()
+ 233:stk500boot.c  **** }
+ 234:stk500boot.c  **** 
+ 235:stk500boot.c  **** 
+ 236:stk500boot.c  **** //*****************************************************************************
+ 237:stk500boot.c  **** void delay_ms(unsigned int timedelay)
+ 238:stk500boot.c  **** {
+ 239:stk500boot.c  **** 	unsigned int i;
+ 240:stk500boot.c  **** 	for (i=0;i<timedelay;i++)
+ 241:stk500boot.c  **** 	{
+ 242:stk500boot.c  **** 		_delay_ms(0.5);
+ 243:stk500boot.c  **** 	}
+ 244:stk500boot.c  **** }
+ 245:stk500boot.c  **** 
+ 246:stk500boot.c  **** //*****************************************************************************
+ 247:stk500boot.c  **** /*
+ 248:stk500boot.c  ****  * send single byte to USART, wait until transmission is completed
+ 249:stk500boot.c  ****  */
+ 250:stk500boot.c  **** static void sendchar(char c)
+ 251:stk500boot.c  **** {
+  14               		.loc 1 251 0
+  15               	.LVL0:
+  16               	/* prologue: function */
+  17               	/* frame size = 0 */
+  18               	/* stack size = 0 */
+  19               	.L__stack_usage = 0
+ 252:stk500boot.c  **** 	UART_DATA_REG	=	c;										// prepare transmission
+  20               		.loc 1 252 0
+  21 0000 8093 C600 		sts 198,r24
+  22               	.LVL1:
+  23               	.L2:
+ 253:stk500boot.c  **** 	while (!(UART_STATUS_REG & (1 << UART_TRANSMIT_COMPLETE)));	// wait until byte sent
+  24               		.loc 1 253 0 discriminator 1
+  25 0004 8091 C000 		lds r24,192
+  26 0008 86FF      		sbrs r24,6
+  27 000a 00C0      		rjmp .L2
+ 254:stk500boot.c  **** 	UART_STATUS_REG |= (1 << UART_TRANSMIT_COMPLETE);			// delete TXCflag
+  28               		.loc 1 254 0
+  29 000c 8091 C000 		lds r24,192
+  30 0010 8064      		ori r24,lo8(64)
+  31 0012 8093 C000 		sts 192,r24
+  32 0016 0895      		ret
+  33               	.LFE9:
+  36               	senden_spi:
+  37               	.LFB11:
+ 255:stk500boot.c  **** }
+ 256:stk500boot.c  **** 
+ 257:stk500boot.c  **** 
+ 258:stk500boot.c  **** //************************************************************************
+ 259:stk500boot.c  **** static int	Serial_Available(void)
+ 260:stk500boot.c  **** {
+ 261:stk500boot.c  **** 	return(UART_STATUS_REG & (1 << UART_RECEIVE_COMPLETE));	// wait for data
+ 262:stk500boot.c  **** }
+ 263:stk500boot.c  **** 
+ 264:stk500boot.c  **** //************************************************************************
+ 265:stk500boot.c  **** // basic display functions
+ 266:stk500boot.c  **** static void senden_spi(unsigned char zeichen){
+  38               		.loc 1 266 0
+  39               	.LVL2:
+  40               	/* prologue: function */
+  41               	/* frame size = 0 */
+  42               	/* stack size = 0 */
+  43               	.L__stack_usage = 0
+ 267:stk500boot.c  **** 	unsigned char a=0, b=0b10000000;
+ 268:stk500boot.c  **** 	fastWriteLow(SPI_CS); // cs auf low => aktivieren
+  44               		.loc 1 268 0
+  45 0018 4398      		cbi 0x8,3
+ 269:stk500boot.c  **** 	fastWriteHigh(SPI_CLK); // clock auf high, zu fallender flanke werden daten �bernommen
+  46               		.loc 1 269 0
+  47 001a 429A      		sbi 0x8,2
+  48 001c 98E0      		ldi r25,lo8(8)
+ 267:stk500boot.c  **** 	unsigned char a=0, b=0b10000000;
+  49               		.loc 1 267 0
+  50 001e 20E8      		ldi r18,lo8(-128)
+  51               	.LVL3:
+  52               	.L10:
+ 270:stk500boot.c  **** 
+ 271:stk500boot.c  **** 	for(a=0;a<8;a++){ /* a = 0..7, wegen 8 pixel zeichen breite */
+ 272:stk500boot.c  **** 		if(zeichen&b)	
+  53               		.loc 1 272 0
+  54 0020 322F      		mov r19,r18
+  55 0022 3823      		and r19,r24
+  56 0024 01F0      		breq .L8
+ 273:stk500boot.c  **** 			fastWriteHigh(SPI_DATA); /* wenn zeichen&b dann porta bit 0 auf high serial data line */
+  57               		.loc 1 273 0
+  58 0026 419A      		sbi 0x8,1
+  59 0028 00C0      		rjmp .L9
+  60               	.L8:
+ 274:stk500boot.c  **** 		else 
+ 275:stk500boot.c  **** 			fastWriteLow(SPI_DATA); /* PORTA bit 0 auf low zwingen serial data line */
+  61               		.loc 1 275 0
+  62 002a 4198      		cbi 0x8,1
+  63               	.L9:
+ 276:stk500boot.c  **** 		fastWriteLow(SPI_CLK); // clock auf high, zu fallender flanke werden daten �bernommen
+  64               		.loc 1 276 0
+  65 002c 4298      		cbi 0x8,2
+ 277:stk500boot.c  **** 		fastWriteHigh(SPI_CLK); // clock auf high, zu fallender flanke werden daten �bernommen
+  66               		.loc 1 277 0
+  67 002e 429A      		sbi 0x8,2
+ 278:stk500boot.c  **** 		b=b>>1;	/* bitmaske einen nach recht schieben => msb first ?! */
+  68               		.loc 1 278 0
+  69 0030 2695      		lsr r18
+  70               	.LVL4:
+  71 0032 9150      		subi r25,lo8(-(-1))
+ 271:stk500boot.c  **** 	for(a=0;a<8;a++){ /* a = 0..7, wegen 8 pixel zeichen breite */
+  72               		.loc 1 271 0
+  73 0034 01F4      		brne .L10
+ 279:stk500boot.c  **** 	}
+ 280:stk500boot.c  **** 	fastWriteHigh(SPI_CS); // cs auf high => deaktivieren
+  74               		.loc 1 280 0
+  75 0036 439A      		sbi 0x8,3
+  76 0038 0895      		ret
+  77               	.LFE11:
+  80               	send_command:
+  81               	.LFB12:
+ 281:stk500boot.c  **** }
+ 282:stk500boot.c  **** 
+ 283:stk500boot.c  **** /////////////////////////////// command funktion ///////////////////////////////
+ 284:stk500boot.c  **** static void send_command(unsigned char theCommand){
+  82               		.loc 1 284 0
+  83               	.LVL5:
+  84               	/* prologue: function */
+  85               	/* frame size = 0 */
+  86               	/* stack size = 0 */
+  87               	.L__stack_usage = 0
+ 285:stk500boot.c  **** 	fastWriteLow(SPI_CD); //turn to command mode
+  88               		.loc 1 285 0
+  89 003a 4798      		cbi 0x8,7
+ 286:stk500boot.c  **** 	senden_spi(theCommand);
+  90               		.loc 1 286 0
+  91 003c 0E94 0000 		call senden_spi
+  92               	.LVL6:
+ 287:stk500boot.c  **** 	fastWriteHigh(SPI_CD); //turn to data mode
+  93               		.loc 1 287 0
+  94 0040 479A      		sbi 0x8,7
+  95 0042 0895      		ret
+  96               	.LFE12:
+  99               	send_char:
+ 100               	.LFB13:
+ 288:stk500boot.c  **** }
+ 289:stk500boot.c  **** 
+ 290:stk500boot.c  **** /////////////////////////////// data funktion ///////////////////////////////
+ 291:stk500boot.c  **** static void send_char(unsigned char zeichen){
+ 101               		.loc 1 291 0
+ 102               	.LVL7:
+ 103               	/* prologue: function */
+ 104               	/* frame size = 0 */
+ 105               	/* stack size = 0 */
+ 106               	.L__stack_usage = 0
+ 292:stk500boot.c  **** 	fastWriteHigh(SPI_CD); //turn to data mode
+ 107               		.loc 1 292 0
+ 108 0044 479A      		sbi 0x8,7
+ 293:stk500boot.c  **** 	senden_spi(zeichen);
+ 109               		.loc 1 293 0
+ 110 0046 0C94 0000 		jmp senden_spi
+ 111               	.LVL8:
+ 112               	.LFE13:
+ 114               		.section	.text.unlikely,"ax",@progbits
+ 116               	draw_line.constprop.0:
+ 117               	.LFB20:
+ 294:stk500boot.c  **** }
+ 295:stk500boot.c  **** //************************************************************************	
+ 296:stk500boot.c  **** 
+ 297:stk500boot.c  **** //************************************************************************
+ 298:stk500boot.c  **** // init display
+ 299:stk500boot.c  **** static void init_display(void){
+ 300:stk500boot.c  **** 	DDRC = 0x00 | (1<<PC7) | (1<<PC5) | (1<<PC3) | (1<<PC2) | (1<<PC1);
+ 301:stk500boot.c  **** 
+ 302:stk500boot.c  **** 	_delay_ms(1); // TODO: Change to 1 ?
+ 303:stk500boot.c  **** 
+ 304:stk500boot.c  **** 	fastWriteHigh(SPI_CS);
+ 305:stk500boot.c  **** 	fastWriteLow(SPI_CD);
+ 306:stk500boot.c  **** 	fastWriteLow(SPI_DATA);
+ 307:stk500boot.c  **** 	fastWriteLow(SPI_CLK);
+ 308:stk500boot.c  **** 
+ 309:stk500boot.c  **** 	// reset
+ 310:stk500boot.c  **** 	fastWriteLow(SPI_RESET);
+ 311:stk500boot.c  **** 	_delay_ms(1);
+ 312:stk500boot.c  **** 	fastWriteHigh(SPI_RESET);
+ 313:stk500boot.c  **** 	//_delay_ms(1);
+ 314:stk500boot.c  **** 
+ 315:stk500boot.c  **** 	// init sequenze
+ 316:stk500boot.c  **** 	/////////////////////////////
+ 317:stk500boot.c  **** 	// XXXXXX | Normale | 180� //
+ 318:stk500boot.c  **** 	// ----------------------- //
+ 319:stk500boot.c  **** 	// Re-Map | 0x41 | 0x52 //
+ 320:stk500boot.c  **** 	// Offset | 0x44 | 0x4C //
+ 321:stk500boot.c  **** 	/////////////////////////////
+ 322:stk500boot.c  **** 
+ 323:stk500boot.c  **** 	send_command(0x15);	send_command(0x00);	send_command(0x3F);	// Column Address
+ 324:stk500boot.c  **** 	send_command(0x75);	send_command(0x00);	send_command(0x3F);
+ 325:stk500boot.c  **** 	send_command(0x81);	send_command(0x66);	// Contrast Control
+ 326:stk500boot.c  **** 	send_command(0x86);// Current Range
+ 327:stk500boot.c  **** 	send_command(0xA0);	send_command(0x52);// Re-map
+ 328:stk500boot.c  **** 	send_command(0xA1);	send_command(0x00);// Display Start Line
+ 329:stk500boot.c  **** 	send_command(0xA2);	send_command(0x4C);// Display Offset
+ 330:stk500boot.c  **** 	send_command(0xA4);// Display Mode
+ 331:stk500boot.c  **** 	send_command(0xA8);	send_command(0x3F);// Multiplex Ratio
+ 332:stk500boot.c  **** 	send_command(0xB1);	send_command(0xA8);// set prechange // Phase Length
+ 333:stk500boot.c  **** 	send_command(0xB2);	send_command(0x46);// Row Period
+ 334:stk500boot.c  **** 	send_command(0xB3);	send_command(0xF1); // war f1 // Display Clock Divide
+ 335:stk500boot.c  **** 	send_command(0xBF);	send_command(0x0D);// VSL
+ 336:stk500boot.c  **** 	send_command(0xBE);	send_command(0x02);	send_command(0xBC);	send_command(0x38); // VCOMH
+ 337:stk500boot.c  **** 	send_command(0xB8);	send_command(0x01);	send_command(0x11);	send_command(0x22);	send_command(0x32)
+ 338:stk500boot.c  **** 	send_command(0x43);	send_command(0x54);	send_command(0x65);	send_command(0x76);
+ 339:stk500boot.c  **** 	send_command(0xAD); /* Set DC-DC */
+ 340:stk500boot.c  **** 	send_command(0x02); /* 03=ON, 02=Off */
+ 341:stk500boot.c  **** 	send_command(0xAF); // Display ON/OFF
+ 342:stk500boot.c  **** 	/* AF=ON, AE=Sleep Mode */
+ 343:stk500boot.c  **** };
+ 344:stk500boot.c  **** 
+ 345:stk500boot.c  **** // display filled rect
+ 346:stk500boot.c  **** static void clear_screen(void){
+ 347:stk500boot.c  **** 	send_command(0x15);
+ 348:stk500boot.c  **** 	send_command(0x00);
+ 349:stk500boot.c  **** 	send_command(0x7F);
+ 350:stk500boot.c  **** 	send_command(0x75);
+ 351:stk500boot.c  **** 	send_command(0x00);
+ 352:stk500boot.c  **** 	send_command(0x3F);
+ 353:stk500boot.c  **** 	int a;
+ 354:stk500boot.c  **** 	for (a=0;a<(128*32);a++){
+ 355:stk500boot.c  **** 		send_char(0x00);
+ 356:stk500boot.c  **** 	}
+ 357:stk500boot.c  **** }
+ 358:stk500boot.c  **** 
+ 359:stk500boot.c  **** // display horizontal line
+ 360:stk500boot.c  **** static void draw_line(unsigned char x,unsigned char y,unsigned char width){
+ 118               		.loc 1 360 0
+ 119               	.LVL9:
+ 120 0000 CF93      		push r28
+ 121               	.LCFI0:
+ 122 0002 DF93      		push r29
+ 123               	.LCFI1:
+ 124               	/* prologue: function */
+ 125               	/* frame size = 0 */
+ 126               	/* stack size = 2 */
+ 127               	.L__stack_usage = 2
+ 128 0004 C82F      		mov r28,r24
+ 129               	.LVL10:
+ 361:stk500boot.c  **** 	send_command(0x15);
+ 130               		.loc 1 361 0
+ 131 0006 85E1      		ldi r24,lo8(21)
+ 132               	.LVL11:
+ 133 0008 0E94 0000 		call send_command
+ 134               	.LVL12:
+ 362:stk500boot.c  **** 	send_command(x/2);
+ 135               		.loc 1 362 0
+ 136 000c 80E0      		ldi r24,0
+ 137 000e 0E94 0000 		call send_command
+ 138               	.LVL13:
+ 363:stk500boot.c  **** 	send_command((width-1+x)/2);
+ 139               		.loc 1 363 0
+ 140 0012 8FE3      		ldi r24,lo8(63)
+ 141 0014 0E94 0000 		call send_command
+ 142               	.LVL14:
+ 364:stk500boot.c  **** 	send_command(0x75);
+ 143               		.loc 1 364 0
+ 144 0018 85E7      		ldi r24,lo8(117)
+ 145 001a 0E94 0000 		call send_command
+ 146               	.LVL15:
+ 365:stk500boot.c  **** 	send_command(y);
+ 147               		.loc 1 365 0
+ 148 001e 8C2F      		mov r24,r28
+ 149 0020 0E94 0000 		call send_command
+ 150               	.LVL16:
+ 366:stk500boot.c  **** 	send_command(y);
+ 151               		.loc 1 366 0
+ 152 0024 8C2F      		mov r24,r28
+ 153 0026 0E94 0000 		call send_command
+ 154               	.LVL17:
+ 155 002a C0E4      		ldi r28,lo8(64)
+ 156 002c D0E0      		ldi r29,0
+ 157               	.LVL18:
+ 158               	.L15:
+ 367:stk500boot.c  **** 	int a;
+ 368:stk500boot.c  **** 	for(a=0;a<(width/2);a++){
+ 369:stk500boot.c  **** 		send_char(0xff);
+ 159               		.loc 1 369 0
+ 160 002e 8FEF      		ldi r24,lo8(-1)
+ 161 0030 0E94 0000 		call send_char
+ 162               	.LVL19:
+ 163 0034 2197      		sbiw r28,1
+ 368:stk500boot.c  **** 	for(a=0;a<(width/2);a++){
+ 164               		.loc 1 368 0
+ 165 0036 01F4      		brne .L15
+ 166               	/* epilogue start */
+ 370:stk500boot.c  **** 	};
+ 371:stk500boot.c  **** }
+ 167               		.loc 1 371 0
+ 168 0038 DF91      		pop r29
+ 169 003a CF91      		pop r28
+ 170 003c 0895      		ret
+ 171               	.LFE20:
+ 173               		.section	.init9,"ax",@progbits
+ 174               	.global	__jumpMain
+ 176               	__jumpMain:
+ 177               	.LFB7:
+ 220:stk500boot.c  **** {
+ 178               		.loc 1 220 0
+ 179               	/* prologue: naked */
+ 180               	/* frame size = 0 */
+ 181               	/* stack size = 0 */
+ 182               	.L__stack_usage = 0
+ 224:stk500boot.c  **** 	asm volatile ( ".set __stack, %0" :: "i" (RAMEND) );
+ 183               		.loc 1 224 0
+ 184               	/* #APP */
+ 185               	 ;  224 "stk500boot.c" 1
+ 186               		.set __stack, 8703
+ 187               	 ;  0 "" 2
+ 226:stk500boot.c  **** 	asm volatile ( "ldi	16, %0" :: "i" (RAMEND >> 8) );
+ 188               		.loc 1 226 0
+ 189               	 ;  226 "stk500boot.c" 1
+ 190 0000 01E2      		ldi	16, 33
+ 191               	 ;  0 "" 2
+ 227:stk500boot.c  **** 	asm volatile ( "out %0,16" :: "i" (AVR_STACK_POINTER_HI_ADDR) );
+ 192               		.loc 1 227 0
+ 193               	 ;  227 "stk500boot.c" 1
+ 194 0002 0EBF      		out 62,16
+ 195               	 ;  0 "" 2
+ 228:stk500boot.c  **** 	asm volatile ( "ldi	16, %0" :: "i" (RAMEND & 0x0ff) );
+ 196               		.loc 1 228 0
+ 197               	 ;  228 "stk500boot.c" 1
+ 198 0004 0FEF      		ldi	16, 255
+ 199               	 ;  0 "" 2
+ 229:stk500boot.c  **** 	asm volatile ( "out %0,16" :: "i" (AVR_STACK_POINTER_LO_ADDR) );
+ 200               		.loc 1 229 0
+ 201               	 ;  229 "stk500boot.c" 1
+ 202 0006 0DBF      		out 61,16
+ 203               	 ;  0 "" 2
+ 230:stk500boot.c  **** 	asm volatile ( "clr __zero_reg__" );									// GCC depends on register r1 set to 0
+ 204               		.loc 1 230 0
+ 205               	 ;  230 "stk500boot.c" 1
+ 206 0008 1124      		clr __zero_reg__
+ 207               	 ;  0 "" 2
+ 231:stk500boot.c  **** 	asm volatile ( "out %0, __zero_reg__" :: "I" (_SFR_IO_ADDR(SREG)) );	// set SREG to 0
+ 208               		.loc 1 231 0
+ 209               	 ;  231 "stk500boot.c" 1
+ 210 000a 1FBE      		out 63, __zero_reg__
+ 211               	 ;  0 "" 2
+ 232:stk500boot.c  **** 	asm volatile ( "jmp main");												// jump to main()
+ 212               		.loc 1 232 0
+ 213               	 ;  232 "stk500boot.c" 1
+ 214 000c 0C94 0000 		jmp main
+ 215               	 ;  0 "" 2
+ 216               	/* epilogue start */
+ 233:stk500boot.c  **** }
+ 217               		.loc 1 233 0
+ 218               	/* #NOAPP */
+ 219               	.LFE7:
+ 221               		.text
+ 222               	.global	delay_ms
+ 224               	delay_ms:
+ 225               	.LFB8:
+ 238:stk500boot.c  **** {
+ 226               		.loc 1 238 0
+ 227               	.LVL20:
+ 228               	/* prologue: function */
+ 229               	/* frame size = 0 */
+ 230               	/* stack size = 0 */
+ 231               	.L__stack_usage = 0
+ 240:stk500boot.c  **** 	for (i=0;i<timedelay;i++)
+ 232               		.loc 1 240 0
+ 233 004a 20E0      		ldi r18,0
+ 234 004c 30E0      		ldi r19,0
+ 235 004e 00C0      		rjmp .L19
+ 236               	.LVL21:
+ 237               	.L20:
+ 238               	.LBB27:
+ 239               	.LBB28:
+ 240               		.file 2 "/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h"
+   1:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** /* Copyright (c) 2002, Marek Michalkiewicz
+   2:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    Copyright (c) 2004,2005,2007 Joerg Wunsch
+   3:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    Copyright (c) 2007  Florin-Viorel Petrov
+   4:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    All rights reserved.
+   5:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+   6:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    Redistribution and use in source and binary forms, with or without
+   7:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    modification, are permitted provided that the following conditions are met:
+   8:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+   9:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    * Redistributions of source code must retain the above copyright
+  10:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****      notice, this list of conditions and the following disclaimer.
+  11:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  12:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    * Redistributions in binary form must reproduce the above copyright
+  13:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****      notice, this list of conditions and the following disclaimer in
+  14:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****      the documentation and/or other materials provided with the
+  15:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****      distribution.
+  16:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  17:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    * Neither the name of the copyright holders nor the names of
+  18:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****      contributors may be used to endorse or promote products derived
+  19:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****      from this software without specific prior written permission.
+  20:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  21:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  22:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  23:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  24:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  25:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  26:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  27:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  28:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  29:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  30:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  31:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   POSSIBILITY OF SUCH DAMAGE. */
+  32:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  33:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** /* $Id: delay.h.in 2251 2011-09-14 08:20:33Z joerg_wunsch $ */
+  34:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  35:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #ifndef _UTIL_DELAY_H_
+  36:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #define _UTIL_DELAY_H_ 1
+  37:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  38:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #ifndef __HAS_DELAY_CYCLES
+  39:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #define __HAS_DELAY_CYCLES 1
+  40:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #endif
+  41:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  42:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #include <inttypes.h>
+  43:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #include <util/delay_basic.h>
+  44:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #include <math.h>
+  45:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  46:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** /** \file */
+  47:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** /** \defgroup util_delay <util/delay.h>: Convenience functions for busy-wait delay loops
+  48:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     \code
+  49:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     #define F_CPU 1000000UL  // 1 MHz
+  50:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     //#define F_CPU 14.7456E6
+  51:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     #include <util/delay.h>
+  52:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     \endcode
+  53:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  54:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     \note As an alternative method, it is possible to pass the
+  55:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     F_CPU macro down to the compiler from the Makefile.
+  56:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     Obviously, in that case, no \c \#define statement should be
+  57:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     used.
+  58:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  59:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     The functions in this header file are wrappers around the basic
+  60:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     busy-wait functions from <util/delay_basic.h>.  They are meant as
+  61:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     convenience functions where actual time values can be specified
+  62:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     rather than a number of cycles to wait for.  The idea behind is
+  63:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     that compile-time constant expressions will be eliminated by
+  64:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     compiler optimization so floating-point expressions can be used
+  65:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     to calculate the number of delay cycles needed based on the CPU
+  66:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     frequency passed by the macro F_CPU.
+  67:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  68:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     \note In order for these functions to work as intended, compiler
+  69:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     optimizations <em>must</em> be enabled, and the delay time
+  70:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     <em>must</em> be an expression that is a known constant at
+  71:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     compile-time.  If these requirements are not met, the resulting
+  72:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     delay will be much longer (and basically unpredictable), and
+  73:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     applications that otherwise do not use floating-point calculations
+  74:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     will experience severe code bloat by the floating-point library
+  75:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     routines linked into the application.
+  76:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  77:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     The functions available allow the specification of microsecond, and
+  78:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     millisecond delays directly, using the application-supplied macro
+  79:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     F_CPU as the CPU clock frequency (in Hertz).
+  80:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  81:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** */
+  82:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  83:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #if !defined(__DOXYGEN__)
+  84:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** static inline void _delay_us(double __us) __attribute__((always_inline));
+  85:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** static inline void _delay_ms(double __ms) __attribute__((always_inline));
+  86:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #endif
+  87:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  88:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #ifndef F_CPU
+  89:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** /* prevent compiler error by supplying a default */
+  90:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** # warning "F_CPU not defined for <util/delay.h>"
+  91:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** # define F_CPU 1000000UL
+  92:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #endif
+  93:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  94:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #ifndef __OPTIMIZE__
+  95:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** # warning "Compiler optimizations disabled; functions from <util/delay.h> won't work as designed"
+  96:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #endif
+  97:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+  98:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #if __HAS_DELAY_CYCLES && defined(__OPTIMIZE__) && \
+  99:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   !defined(__DELAY_BACKWARD_COMPATIBLE__) &&	   \
+ 100:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   __STDC_HOSTED__
+ 101:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #  include <math.h>
+ 102:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #endif
+ 103:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 104:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** /**
+ 105:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    \ingroup util_delay
+ 106:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 107:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    Perform a delay of \c __ms milliseconds, using _delay_loop_2().
+ 108:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 109:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    The macro F_CPU is supposed to be defined to a
+ 110:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    constant defining the CPU clock frequency (in Hertz).
+ 111:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 112:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    The maximal possible delay is 262.14 ms / F_CPU in MHz.
+ 113:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 114:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    When the user request delay which exceed the maximum possible one,
+ 115:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    _delay_ms() provides a decreased resolution functionality. In this
+ 116:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    mode _delay_ms() will work with a resolution of 1/10 ms, providing
+ 117:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    delays up to 6.5535 seconds (independent from CPU frequency).  The
+ 118:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    user will not be informed about decreased resolution.
+ 119:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 120:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    If the avr-gcc toolchain has __builtin_avr_delay_cycles(unsigned long)
+ 121:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    support, maximal possible delay is 4294967.295 ms/ F_CPU in MHz. For
+ 122:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    values greater than the maximal possible delay, overflows results in
+ 123:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    no delay i.e., 0ms.
+ 124:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 125:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    Conversion of __us into clock cycles may not always result in integer.
+ 126:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    By default, the clock cycles rounded up to next integer. This ensures that
+ 127:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    the user gets atleast __us microseconds of delay.
+ 128:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 129:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    Alternatively, user can define __DELAY_ROUND_DOWN__ and __DELAY_ROUND_CLOSEST__
+ 130:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    to round down and round to closest integer.
+ 131:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 132:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    Note: The new implementation of _delay_ms(double __ms) with 
+ 133:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****     __builtin_avr_delay_cycles(unsigned long) support is not backward compatible. 
+ 134:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    User can define __DELAY_BACKWARD_COMPATIBLE__ to get a backward compatible delay.
+ 135:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    Also, the backward compatible
+ 136:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    algorithm will be chosen if the code is compiled in a <em>freestanding
+ 137:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    environment</em> (GCC option \c -ffreestanding), as the math functions
+ 138:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****    required for rounding are not available to the compiler then.
+ 139:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 140:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****  */
+ 141:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** void
+ 142:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** _delay_ms(double __ms)
+ 143:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** {
+ 144:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 	uint16_t __ticks;
+ 145:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 	double __tmp ; 
+ 146:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** #if __HAS_DELAY_CYCLES && defined(__OPTIMIZE__) && \
+ 147:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   !defined(__DELAY_BACKWARD_COMPATIBLE__) &&	   \
+ 148:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h ****   __STDC_HOSTED__
+ 149:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 	uint32_t __ticks_dc;
+ 150:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 	extern void __builtin_avr_delay_cycles(unsigned long);
+ 151:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 	__tmp = ((F_CPU) / 1e3) * __ms;
+ 152:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 153:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 	#if defined(__DELAY_ROUND_DOWN__)
+ 154:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)fabs(__tmp);
+ 155:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 156:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 	#elif defined(__DELAY_ROUND_CLOSEST__)
+ 157:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)(fabs(__tmp)+0.5);
+ 158:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 159:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 	#else
+ 160:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 		//round up by default
+ 161:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)(ceil(fabs(__tmp)));
+ 162:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 	#endif
+ 163:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 
+ 164:/usr/lib/gcc/avr/4.7.0/../../../avr/include/util/delay.h **** 	__builtin_avr_delay_cycles(__ticks_dc);
+ 241               		.loc 2 164 0
+ 242 0050 EFEC      		ldi r30,lo8(1999)
+ 243 0052 F7E0      		ldi r31,hi8(1999)
+ 244 0054 3197      		1: sbiw r30,1
+ 245 0056 01F4      		brne 1b
+ 246 0058 00C0      		rjmp .
+ 247 005a 0000      		nop
+ 248               	.LBE28:
+ 249               	.LBE27:
+ 240:stk500boot.c  **** 	for (i=0;i<timedelay;i++)
+ 250               		.loc 1 240 0
+ 251 005c 2F5F      		subi r18,-1
+ 252 005e 3F4F      		sbci r19,-1
+ 253               	.LVL22:
+ 254               	.L19:
+ 240:stk500boot.c  **** 	for (i=0;i<timedelay;i++)
+ 255               		.loc 1 240 0 is_stmt 0 discriminator 1
+ 256 0060 2817      		cp r18,r24
+ 257 0062 3907      		cpc r19,r25
+ 258 0064 01F4      		brne .L20
+ 259               	/* epilogue start */
+ 244:stk500boot.c  **** }
+ 260               		.loc 1 244 0 is_stmt 1
+ 261 0066 0895      		ret
+ 262               	.LFE8:
+ 264               		.section	.text.startup,"ax",@progbits
+ 265               	.global	main
+ 267               	main:
+ 268               	.LFB19:
+ 372:stk500boot.c  **** 
+ 373:stk500boot.c  **** static void show_logo(void){
+ 374:stk500boot.c  **** 	unsigned char a,zeile,buchstabe;
+ 375:stk500boot.c  **** 	unsigned char x=15;
+ 376:stk500boot.c  **** 	unsigned char y=47;
+ 377:stk500boot.c  **** 
+ 378:stk500boot.c  **** 	unsigned char data,send_me;
+ 379:stk500boot.c  **** 	for(a=0;a<9;a++){
+ 380:stk500boot.c  **** 		if(a==0){ // S
+ 381:stk500boot.c  **** 			buchstabe=5;
+ 382:stk500boot.c  **** 		} else if(a==1){ // P
+ 383:stk500boot.c  **** 			buchstabe=6;
+ 384:stk500boot.c  **** 		} else if(a==2 || a==3){ // E
+ 385:stk500boot.c  **** 			buchstabe=0;
+ 386:stk500boot.c  **** 		} else if(a==4){ // D
+ 387:stk500boot.c  **** 			buchstabe=1;
+ 388:stk500boot.c  **** 		} else if(a==5 || a==8){ // O
+ 389:stk500boot.c  **** 			buchstabe=4;
+ 390:stk500boot.c  **** 		} else if(a==6){ // I
+ 391:stk500boot.c  **** 			buchstabe=2;
+ 392:stk500boot.c  **** 		} else if(a==7){ // N
+ 393:stk500boot.c  **** 			buchstabe=3;
+ 394:stk500boot.c  **** 		}
+ 395:stk500boot.c  **** 		// SPEEDOINO
+ 396:stk500boot.c  **** 		send_command(0x15);
+ 397:stk500boot.c  **** 		send_command(x);
+ 398:stk500boot.c  **** 		send_command(x+2); // buchstaben sind 5px breit + spacer
+ 399:stk500boot.c  **** 		send_command(0x75);
+ 400:stk500boot.c  **** 		send_command(y);
+ 401:stk500boot.c  **** 		send_command(y+5); // und 5 px hoch
+ 402:stk500boot.c  **** 
+ 403:stk500boot.c  **** 		buchstabe=buchstabe*6;
+ 404:stk500boot.c  **** 		for(zeile=0;zeile<6;zeile++){
+ 405:stk500boot.c  **** 			data=speedoino_data[buchstabe];
+ 406:stk500boot.c  **** 			buchstabe++;
+ 407:stk500boot.c  **** 
+ 408:stk500boot.c  **** 			send_me=0x00;
+ 409:stk500boot.c  **** 			if(data&0b10000000)	send_me|=0xf0;
+ 410:stk500boot.c  **** 			if(data&0b01000000)	send_me|=0x0f;
+ 411:stk500boot.c  **** 			send_char(send_me);
+ 412:stk500boot.c  **** 
+ 413:stk500boot.c  **** 			send_me=0x00;
+ 414:stk500boot.c  **** 			if(data&0b00100000)	send_me|=0xf0;
+ 415:stk500boot.c  **** 			if(data&0b00010000)	send_me|=0x0f;
+ 416:stk500boot.c  **** 			send_char(send_me);
+ 417:stk500boot.c  **** 
+ 418:stk500boot.c  **** 			send_me=0x00;
+ 419:stk500boot.c  **** 			if(data&0b00001000)	send_me|=0xf0;
+ 420:stk500boot.c  **** 			if(data&0b00000100)	send_me|=0x0f;
+ 421:stk500boot.c  **** 			send_char(send_me);
+ 422:stk500boot.c  **** 		};
+ 423:stk500boot.c  **** 
+ 424:stk500boot.c  **** 		x+=3;
+ 425:stk500boot.c  **** 	};
+ 426:stk500boot.c  **** }
+ 427:stk500boot.c  **** 
+ 428:stk500boot.c  **** //************************************************************************
+ 429:stk500boot.c  **** 
+ 430:stk500boot.c  **** 
+ 431:stk500boot.c  **** 
+ 432:stk500boot.c  **** #define	 MAX_TIME_COUNT	(F_CPU >> 1)
+ 433:stk500boot.c  **** //*****************************************************************************
+ 434:stk500boot.c  **** static unsigned char recchar_timeout(void)
+ 435:stk500boot.c  **** {
+ 436:stk500boot.c  **** 	uint32_t count = 0;
+ 437:stk500boot.c  **** 
+ 438:stk500boot.c  **** 	while (!(UART_STATUS_REG & (1 << UART_RECEIVE_COMPLETE)))
+ 439:stk500boot.c  **** 	{
+ 440:stk500boot.c  **** 		// wait for data
+ 441:stk500boot.c  **** 		count++;
+ 442:stk500boot.c  **** 		if (count > MAX_TIME_COUNT)
+ 443:stk500boot.c  **** 		{
+ 444:stk500boot.c  **** 			unsigned int	data;
+ 445:stk500boot.c  **** #if (FLASHEND > 0x0FFFF)
+ 446:stk500boot.c  **** 			data	=	pgm_read_word_far(0);	//*	get the first word of the user program
+ 447:stk500boot.c  **** #else
+ 448:stk500boot.c  **** 			data	=	pgm_read_word_near(0);	//*	get the first word of the user program
+ 449:stk500boot.c  **** #endif
+ 450:stk500boot.c  **** 			if (data != 0xffff)					//*	make sure its valid before jumping to it.
+ 451:stk500boot.c  **** 			{
+ 452:stk500boot.c  **** 				asm volatile(
+ 453:stk500boot.c  **** 						"clr	r30		\n\t"
+ 454:stk500boot.c  **** 						"clr	r31		\n\t"
+ 455:stk500boot.c  **** 						"ijmp	\n\t"
+ 456:stk500boot.c  **** 				);
+ 457:stk500boot.c  **** 			}
+ 458:stk500boot.c  **** 			count	=	0;
+ 459:stk500boot.c  **** 		}
+ 460:stk500boot.c  **** 	}
+ 461:stk500boot.c  **** 	return UART_DATA_REG;
+ 462:stk500boot.c  **** }
+ 463:stk500boot.c  **** 
+ 464:stk500boot.c  **** 
+ 465:stk500boot.c  **** 
+ 466:stk500boot.c  **** //*****************************************************************************
+ 467:stk500boot.c  **** int main(void)
+ 468:stk500boot.c  **** {
+ 269               		.loc 1 468 0
+ 270 0000 CF93      		push r28
+ 271               	.LCFI2:
+ 272 0002 DF93      		push r29
+ 273               	.LCFI3:
+ 274 0004 CDB7      		in r28,__SP_L__
+ 275 0006 DEB7      		in r29,__SP_H__
+ 276               	.LCFI4:
+ 277 0008 CB52      		subi r28,43
+ 278 000a D140      		sbci r29,1
+ 279               	.LCFI5:
+ 280 000c 0FB6      		in __tmp_reg__,__SREG__
+ 281 000e F894      		cli
+ 282 0010 DEBF      		out __SP_H__,r29
+ 283 0012 0FBE      		out __SREG__,__tmp_reg__
+ 284 0014 CDBF      		out __SP_L__,r28
+ 285               	/* prologue: function */
+ 286               	/* frame size = 299 */
+ 287               	/* stack size = 301 */
+ 288               	.L__stack_usage = 301
+ 289               	.LVL23:
+ 469:stk500boot.c  **** 	address_t		address			=	0;
+ 470:stk500boot.c  **** 	address_t		eraseAddress	=	0;
+ 471:stk500boot.c  **** 	unsigned char	msgParseState;
+ 472:stk500boot.c  **** 	unsigned int	ii				=	0;
+ 473:stk500boot.c  **** 	unsigned char	checksum		=	0;
+ 474:stk500boot.c  **** 	unsigned char	seqNum			=	1;
+ 475:stk500boot.c  **** 	unsigned int	msgLength		=	0;
+ 476:stk500boot.c  **** 	unsigned char	msgBuffer[285];
+ 477:stk500boot.c  **** 	unsigned char	c, *p;
+ 478:stk500boot.c  **** 	unsigned char   isLeave = 0;
+ 479:stk500boot.c  **** 
+ 480:stk500boot.c  **** 	unsigned long	boot_timeout;
+ 481:stk500boot.c  **** 	unsigned long	boot_timer;
+ 482:stk500boot.c  **** 	unsigned int	boot_state;
+ 483:stk500boot.c  **** 
+ 484:stk500boot.c  **** 	/////////Kolja von hier/////////
+ 485:stk500boot.c  **** 	/* enabled in ph3 to read if its a bluetooth reset*/
+ 486:stk500boot.c  **** 	DDRH  &= ~(1<<PH3); // one input
+ 290               		.loc 1 486 0
+ 291 0016 8091 0101 		lds r24,257
+ 292 001a 877F      		andi r24,lo8(-9)
+ 293 001c 8093 0101 		sts 257,r24
+ 487:stk500boot.c  **** 	PORTH =  0x00 | (1<<PH3); // with pullup
+ 294               		.loc 1 487 0
+ 295 0020 88E0      		ldi r24,lo8(8)
+ 296 0022 8093 0201 		sts 258,r24
+ 488:stk500boot.c  **** 
+ 489:stk500boot.c  **** 	/* enabled pull up on CAN CS connection, to deactivate can bus interface (interface is low active)
+ 490:stk500boot.c  **** 	PORTK |= (1<<PK4);
+ 297               		.loc 1 490 0
+ 298 0026 8091 0801 		lds r24,264
+ 299 002a 8061      		ori r24,lo8(16)
+ 300 002c 8093 0801 		sts 264,r24
+ 301               	.LVL24:
+ 491:stk500boot.c  **** 	/////////Kolja bis hier/////////
+ 492:stk500boot.c  **** 
+ 493:stk500boot.c  **** 
+ 494:stk500boot.c  **** 	boot_timer	=	0;
+ 495:stk500boot.c  **** 	boot_state	=	0;
+ 496:stk500boot.c  **** 	boot_timeout	=	250000; // 7 seconds , approx 2us per step when optimize "s"
+ 497:stk500boot.c  **** 
+ 498:stk500boot.c  **** 	/*
+ 499:stk500boot.c  **** 	 * Branch to bootloader or application code ?
+ 500:stk500boot.c  **** 	 */
+ 501:stk500boot.c  **** 
+ 502:stk500boot.c  **** 	/*
+ 503:stk500boot.c  **** 	 * Init UART
+ 504:stk500boot.c  **** 	 * set baudrate and enable USART receiver and transmiter without interrupts
+ 505:stk500boot.c  **** 	 */
+ 506:stk500boot.c  **** #if UART_BAUDRATE_DOUBLE_SPEED
+ 507:stk500boot.c  **** 	UART_STATUS_REG		|=	(1 <<UART_DOUBLE_SPEED);
+ 302               		.loc 1 507 0
+ 303 0030 8091 C000 		lds r24,192
+ 304 0034 8260      		ori r24,lo8(2)
+ 305 0036 8093 C000 		sts 192,r24
+ 508:stk500boot.c  **** #endif
+ 509:stk500boot.c  **** 	UART_BAUD_RATE_LOW	=	UART_BAUD_SELECT(BAUDRATE,F_CPU);
+ 306               		.loc 1 509 0
+ 307 003a 80E1      		ldi r24,lo8(16)
+ 308 003c 8093 C400 		sts 196,r24
+ 510:stk500boot.c  **** 	UART_CONTROL_REG	=	(1 << UART_ENABLE_RECEIVER) | (1 << UART_ENABLE_TRANSMITTER);
+ 309               		.loc 1 510 0
+ 310 0040 88E1      		ldi r24,lo8(24)
+ 311 0042 8093 C100 		sts 193,r24
+ 511:stk500boot.c  **** 
+ 512:stk500boot.c  **** 	asm volatile ("nop");			// wait until port has changed
+ 312               		.loc 1 512 0
+ 313               	/* #APP */
+ 314               	 ;  512 "stk500boot.c" 1
+ 315 0046 0000      		nop
+ 316               	 ;  0 "" 2
+ 317               	/* #NOAPP */
+ 318               	.LBB62:
+ 319               	.LBB63:
+ 300:stk500boot.c  **** 	DDRC = 0x00 | (1<<PC7) | (1<<PC5) | (1<<PC3) | (1<<PC2) | (1<<PC1);
+ 320               		.loc 1 300 0
+ 321 0048 8EEA      		ldi r24,lo8(-82)
+ 322 004a 87B9      		out 0x7,r24
+ 323               	.LVL25:
+ 324               	.LBB64:
+ 325               	.LBB65:
+ 326               		.loc 2 164 0
+ 327 004c 8FE9      		ldi r24,lo8(3999)
+ 328 004e 9FE0      		ldi r25,hi8(3999)
+ 329 0050 0197      		1: sbiw r24,1
+ 330 0052 01F4      		brne 1b
+ 331 0054 00C0      		rjmp .
+ 332 0056 0000      		nop
+ 333               	.LBE65:
+ 334               	.LBE64:
+ 304:stk500boot.c  **** 	fastWriteHigh(SPI_CS);
+ 335               		.loc 1 304 0
+ 336 0058 439A      		sbi 0x8,3
+ 305:stk500boot.c  **** 	fastWriteLow(SPI_CD);
+ 337               		.loc 1 305 0
+ 338 005a 4798      		cbi 0x8,7
+ 306:stk500boot.c  **** 	fastWriteLow(SPI_DATA);
+ 339               		.loc 1 306 0
+ 340 005c 4198      		cbi 0x8,1
+ 307:stk500boot.c  **** 	fastWriteLow(SPI_CLK);
+ 341               		.loc 1 307 0
+ 342 005e 4298      		cbi 0x8,2
+ 310:stk500boot.c  **** 	fastWriteLow(SPI_RESET);
+ 343               		.loc 1 310 0
+ 344 0060 4598      		cbi 0x8,5
+ 345               	.LVL26:
+ 346               	.LBB66:
+ 347               	.LBB67:
+ 348               		.loc 2 164 0
+ 349 0062 EFE9      		ldi r30,lo8(3999)
+ 350 0064 FFE0      		ldi r31,hi8(3999)
+ 351 0066 3197      		1: sbiw r30,1
+ 352 0068 01F4      		brne 1b
+ 353 006a 00C0      		rjmp .
+ 354 006c 0000      		nop
+ 355               	.LBE67:
+ 356               	.LBE66:
+ 312:stk500boot.c  **** 	fastWriteHigh(SPI_RESET);
+ 357               		.loc 1 312 0
+ 358 006e 459A      		sbi 0x8,5
+ 323:stk500boot.c  **** 	send_command(0x15);	send_command(0x00);	send_command(0x3F);	// Column Address
+ 359               		.loc 1 323 0
+ 360 0070 85E1      		ldi r24,lo8(21)
+ 361 0072 0E94 0000 		call send_command
+ 362               	.LVL27:
+ 363 0076 80E0      		ldi r24,0
+ 364 0078 0E94 0000 		call send_command
+ 365               	.LVL28:
+ 366 007c 8FE3      		ldi r24,lo8(63)
+ 367 007e 0E94 0000 		call send_command
+ 368               	.LVL29:
+ 324:stk500boot.c  **** 	send_command(0x75);	send_command(0x00);	send_command(0x3F);
+ 369               		.loc 1 324 0
+ 370 0082 85E7      		ldi r24,lo8(117)
+ 371 0084 0E94 0000 		call send_command
+ 372               	.LVL30:
+ 373 0088 80E0      		ldi r24,0
+ 374 008a 0E94 0000 		call send_command
+ 375               	.LVL31:
+ 376 008e 8FE3      		ldi r24,lo8(63)
+ 377 0090 0E94 0000 		call send_command
+ 378               	.LVL32:
+ 325:stk500boot.c  **** 	send_command(0x81);	send_command(0x66);	// Contrast Control
+ 379               		.loc 1 325 0
+ 380 0094 81E8      		ldi r24,lo8(-127)
+ 381 0096 0E94 0000 		call send_command
+ 382               	.LVL33:
+ 383 009a 86E6      		ldi r24,lo8(102)
+ 384 009c 0E94 0000 		call send_command
+ 385               	.LVL34:
+ 326:stk500boot.c  **** 	send_command(0x86);// Current Range
+ 386               		.loc 1 326 0
+ 387 00a0 86E8      		ldi r24,lo8(-122)
+ 388 00a2 0E94 0000 		call send_command
+ 389               	.LVL35:
+ 327:stk500boot.c  **** 	send_command(0xA0);	send_command(0x52);// Re-map
+ 390               		.loc 1 327 0
+ 391 00a6 80EA      		ldi r24,lo8(-96)
+ 392 00a8 0E94 0000 		call send_command
+ 393               	.LVL36:
+ 394 00ac 82E5      		ldi r24,lo8(82)
+ 395 00ae 0E94 0000 		call send_command
+ 396               	.LVL37:
+ 328:stk500boot.c  **** 	send_command(0xA1);	send_command(0x00);// Display Start Line
+ 397               		.loc 1 328 0
+ 398 00b2 81EA      		ldi r24,lo8(-95)
+ 399 00b4 0E94 0000 		call send_command
+ 400               	.LVL38:
+ 401 00b8 80E0      		ldi r24,0
+ 402 00ba 0E94 0000 		call send_command
+ 403               	.LVL39:
+ 329:stk500boot.c  **** 	send_command(0xA2);	send_command(0x4C);// Display Offset
+ 404               		.loc 1 329 0
+ 405 00be 82EA      		ldi r24,lo8(-94)
+ 406 00c0 0E94 0000 		call send_command
+ 407               	.LVL40:
+ 408 00c4 8CE4      		ldi r24,lo8(76)
+ 409 00c6 0E94 0000 		call send_command
+ 410               	.LVL41:
+ 330:stk500boot.c  **** 	send_command(0xA4);// Display Mode
+ 411               		.loc 1 330 0
+ 412 00ca 84EA      		ldi r24,lo8(-92)
+ 413 00cc 0E94 0000 		call send_command
+ 414               	.LVL42:
+ 331:stk500boot.c  **** 	send_command(0xA8);	send_command(0x3F);// Multiplex Ratio
+ 415               		.loc 1 331 0
+ 416 00d0 88EA      		ldi r24,lo8(-88)
+ 417 00d2 0E94 0000 		call send_command
+ 418               	.LVL43:
+ 419 00d6 8FE3      		ldi r24,lo8(63)
+ 420 00d8 0E94 0000 		call send_command
+ 421               	.LVL44:
+ 332:stk500boot.c  **** 	send_command(0xB1);	send_command(0xA8);// set prechange // Phase Length
+ 422               		.loc 1 332 0
+ 423 00dc 81EB      		ldi r24,lo8(-79)
+ 424 00de 0E94 0000 		call send_command
+ 425               	.LVL45:
+ 426 00e2 88EA      		ldi r24,lo8(-88)
+ 427 00e4 0E94 0000 		call send_command
+ 428               	.LVL46:
+ 333:stk500boot.c  **** 	send_command(0xB2);	send_command(0x46);// Row Period
+ 429               		.loc 1 333 0
+ 430 00e8 82EB      		ldi r24,lo8(-78)
+ 431 00ea 0E94 0000 		call send_command
+ 432               	.LVL47:
+ 433 00ee 86E4      		ldi r24,lo8(70)
+ 434 00f0 0E94 0000 		call send_command
+ 435               	.LVL48:
+ 334:stk500boot.c  **** 	send_command(0xB3);	send_command(0xF1); // war f1 // Display Clock Divide
+ 436               		.loc 1 334 0
+ 437 00f4 83EB      		ldi r24,lo8(-77)
+ 438 00f6 0E94 0000 		call send_command
+ 439               	.LVL49:
+ 440 00fa 81EF      		ldi r24,lo8(-15)
+ 441 00fc 0E94 0000 		call send_command
+ 442               	.LVL50:
+ 335:stk500boot.c  **** 	send_command(0xBF);	send_command(0x0D);// VSL
+ 443               		.loc 1 335 0
+ 444 0100 8FEB      		ldi r24,lo8(-65)
+ 445 0102 0E94 0000 		call send_command
+ 446               	.LVL51:
+ 447 0106 8DE0      		ldi r24,lo8(13)
+ 448 0108 0E94 0000 		call send_command
+ 449               	.LVL52:
+ 336:stk500boot.c  **** 	send_command(0xBE);	send_command(0x02);	send_command(0xBC);	send_command(0x38); // VCOMH
+ 450               		.loc 1 336 0
+ 451 010c 8EEB      		ldi r24,lo8(-66)
+ 452 010e 0E94 0000 		call send_command
+ 453               	.LVL53:
+ 454 0112 82E0      		ldi r24,lo8(2)
+ 455 0114 0E94 0000 		call send_command
+ 456               	.LVL54:
+ 457 0118 8CEB      		ldi r24,lo8(-68)
+ 458 011a 0E94 0000 		call send_command
+ 459               	.LVL55:
+ 460 011e 88E3      		ldi r24,lo8(56)
+ 461 0120 0E94 0000 		call send_command
+ 462               	.LVL56:
+ 337:stk500boot.c  **** 	send_command(0xB8);	send_command(0x01);	send_command(0x11);	send_command(0x22);	send_command(0x32)
+ 463               		.loc 1 337 0
+ 464 0124 88EB      		ldi r24,lo8(-72)
+ 465 0126 0E94 0000 		call send_command
+ 466               	.LVL57:
+ 467 012a 81E0      		ldi r24,lo8(1)
+ 468 012c 0E94 0000 		call send_command
+ 469               	.LVL58:
+ 470 0130 81E1      		ldi r24,lo8(17)
+ 471 0132 0E94 0000 		call send_command
+ 472               	.LVL59:
+ 473 0136 82E2      		ldi r24,lo8(34)
+ 474 0138 0E94 0000 		call send_command
+ 475               	.LVL60:
+ 476 013c 82E3      		ldi r24,lo8(50)
+ 477 013e 0E94 0000 		call send_command
+ 478               	.LVL61:
+ 338:stk500boot.c  **** 	send_command(0x43);	send_command(0x54);	send_command(0x65);	send_command(0x76);
+ 479               		.loc 1 338 0
+ 480 0142 83E4      		ldi r24,lo8(67)
+ 481 0144 0E94 0000 		call send_command
+ 482               	.LVL62:
+ 483 0148 84E5      		ldi r24,lo8(84)
+ 484 014a 0E94 0000 		call send_command
+ 485               	.LVL63:
+ 486 014e 85E6      		ldi r24,lo8(101)
+ 487 0150 0E94 0000 		call send_command
+ 488               	.LVL64:
+ 489 0154 86E7      		ldi r24,lo8(118)
+ 490 0156 0E94 0000 		call send_command
+ 491               	.LVL65:
+ 339:stk500boot.c  **** 	send_command(0xAD); /* Set DC-DC */
+ 492               		.loc 1 339 0
+ 493 015a 8DEA      		ldi r24,lo8(-83)
+ 494 015c 0E94 0000 		call send_command
+ 495               	.LVL66:
+ 340:stk500boot.c  **** 	send_command(0x02); /* 03=ON, 02=Off */
+ 496               		.loc 1 340 0
+ 497 0160 82E0      		ldi r24,lo8(2)
+ 498 0162 0E94 0000 		call send_command
+ 499               	.LVL67:
+ 341:stk500boot.c  **** 	send_command(0xAF); // Display ON/OFF
+ 500               		.loc 1 341 0
+ 501 0166 8FEA      		ldi r24,lo8(-81)
+ 502 0168 0E94 0000 		call send_command
+ 503               	.LVL68:
+ 504               	.LBE63:
+ 505               	.LBE62:
+ 506               	.LBB68:
+ 507               	.LBB69:
+ 347:stk500boot.c  **** 	send_command(0x15);
+ 508               		.loc 1 347 0
+ 509 016c 85E1      		ldi r24,lo8(21)
+ 510 016e 0E94 0000 		call send_command
+ 511               	.LVL69:
+ 348:stk500boot.c  **** 	send_command(0x00);
+ 512               		.loc 1 348 0
+ 513 0172 80E0      		ldi r24,0
+ 514 0174 0E94 0000 		call send_command
+ 515               	.LVL70:
+ 349:stk500boot.c  **** 	send_command(0x7F);
+ 516               		.loc 1 349 0
+ 517 0178 8FE7      		ldi r24,lo8(127)
+ 518 017a 0E94 0000 		call send_command
+ 519               	.LVL71:
+ 350:stk500boot.c  **** 	send_command(0x75);
+ 520               		.loc 1 350 0
+ 521 017e 85E7      		ldi r24,lo8(117)
+ 522 0180 0E94 0000 		call send_command
+ 523               	.LVL72:
+ 351:stk500boot.c  **** 	send_command(0x00);
+ 524               		.loc 1 351 0
+ 525 0184 80E0      		ldi r24,0
+ 526 0186 0E94 0000 		call send_command
+ 527               	.LVL73:
+ 352:stk500boot.c  **** 	send_command(0x3F);
+ 528               		.loc 1 352 0
+ 529 018a 8FE3      		ldi r24,lo8(63)
+ 530 018c 0E94 0000 		call send_command
+ 531               	.LVL74:
+ 532 0190 00E0      		ldi r16,0
+ 533 0192 10E1      		ldi r17,lo8(16)
+ 534               	.LVL75:
+ 535               	.L22:
+ 355:stk500boot.c  **** 		send_char(0x00);
+ 536               		.loc 1 355 0
+ 537 0194 80E0      		ldi r24,0
+ 538 0196 0E94 0000 		call send_char
+ 539               	.LVL76:
+ 540 019a 0150      		subi r16,1
+ 541 019c 1109      		sbc r17,__zero_reg__
+ 354:stk500boot.c  **** 	for (a=0;a<(128*32);a++){
+ 542               		.loc 1 354 0
+ 543 019e 01F4      		brne .L22
+ 544               	.LVL77:
+ 545               	.LBE69:
+ 546               	.LBE68:
+ 513:stk500boot.c  **** 
+ 514:stk500boot.c  **** 	/////////Kolja von hier/////////
+ 515:stk500boot.c  **** 	init_display(); // this is the moment when we can init the display
+ 516:stk500boot.c  **** 	clear_screen();
+ 517:stk500boot.c  **** 	//_delay_ms(2);
+ 518:stk500boot.c  **** 	msgLength		=	11;
+ 519:stk500boot.c  **** 	msgBuffer[0] 	=	CMD_SIGN_ON;
+ 547               		.loc 1 519 0
+ 548 01a0 81E0      		ldi r24,lo8(1)
+ 549 01a2 8983      		std Y+1,r24
+ 520:stk500boot.c  **** 	msgBuffer[1] 	=	STATUS_CMD_OK;
+ 550               		.loc 1 520 0
+ 551 01a4 1A82      		std Y+2,__zero_reg__
+ 521:stk500boot.c  **** 	msgBuffer[2] 	=	8;
+ 552               		.loc 1 521 0
+ 553 01a6 88E0      		ldi r24,lo8(8)
+ 554 01a8 8B83      		std Y+3,r24
+ 522:stk500boot.c  **** 	msgBuffer[3] 	=	'A';
+ 555               		.loc 1 522 0
+ 556 01aa 81E4      		ldi r24,lo8(65)
+ 557 01ac 8C83      		std Y+4,r24
+ 523:stk500boot.c  **** 	msgBuffer[4] 	=	'V';
+ 558               		.loc 1 523 0
+ 559 01ae 86E5      		ldi r24,lo8(86)
+ 560 01b0 8D83      		std Y+5,r24
+ 524:stk500boot.c  **** 	msgBuffer[5] 	=	'R';
+ 561               		.loc 1 524 0
+ 562 01b2 82E5      		ldi r24,lo8(82)
+ 563 01b4 8E83      		std Y+6,r24
+ 525:stk500boot.c  **** 	msgBuffer[6] 	=	'I';
+ 564               		.loc 1 525 0
+ 565 01b6 89E4      		ldi r24,lo8(73)
+ 566 01b8 8F83      		std Y+7,r24
+ 526:stk500boot.c  **** 	msgBuffer[7] 	=	'S';
+ 567               		.loc 1 526 0
+ 568 01ba 83E5      		ldi r24,lo8(83)
+ 569 01bc 8887      		std Y+8,r24
+ 527:stk500boot.c  **** 	msgBuffer[8] 	=	'P';
+ 570               		.loc 1 527 0
+ 571 01be 80E5      		ldi r24,lo8(80)
+ 572 01c0 8987      		std Y+9,r24
+ 528:stk500boot.c  **** 	msgBuffer[9] 	=	'_';
+ 573               		.loc 1 528 0
+ 574 01c2 8FE5      		ldi r24,lo8(95)
+ 575 01c4 8A87      		std Y+10,r24
+ 529:stk500boot.c  **** 	msgBuffer[10]	=	'2';
+ 576               		.loc 1 529 0
+ 577 01c6 82E3      		ldi r24,lo8(50)
+ 578 01c8 8B87      		std Y+11,r24
+ 530:stk500boot.c  **** 	sendchar(MESSAGE_START);
+ 579               		.loc 1 530 0
+ 580 01ca 8BE1      		ldi r24,lo8(27)
+ 581 01cc 0E94 0000 		call sendchar
+ 582               	.LVL78:
+ 531:stk500boot.c  **** 	checksum	=	MESSAGE_START^0;
+ 532:stk500boot.c  **** 
+ 533:stk500boot.c  **** 	sendchar(seqNum);
+ 583               		.loc 1 533 0
+ 584 01d0 81E0      		ldi r24,lo8(1)
+ 585 01d2 0E94 0000 		call sendchar
+ 586               	.LVL79:
+ 534:stk500boot.c  **** 	checksum	^=	seqNum;
+ 535:stk500boot.c  **** 
+ 536:stk500boot.c  **** 	c			=	((msgLength>>8)&0xFF);
+ 537:stk500boot.c  **** 	sendchar(c);
+ 587               		.loc 1 537 0
+ 588 01d6 80E0      		ldi r24,0
+ 589 01d8 0E94 0000 		call sendchar
+ 590               	.LVL80:
+ 538:stk500boot.c  **** 	checksum	^=	c;
+ 539:stk500boot.c  **** 
+ 540:stk500boot.c  **** 	c			=	msgLength&0x00FF;
+ 541:stk500boot.c  **** 	sendchar(c);
+ 591               		.loc 1 541 0
+ 592 01dc 8BE0      		ldi r24,lo8(11)
+ 593 01de 0E94 0000 		call sendchar
+ 594               	.LVL81:
+ 542:stk500boot.c  **** 	checksum ^= c;
+ 543:stk500boot.c  **** 
+ 544:stk500boot.c  **** 	sendchar(TOKEN);
+ 595               		.loc 1 544 0
+ 596 01e2 8EE0      		ldi r24,lo8(14)
+ 597 01e4 0E94 0000 		call sendchar
+ 598               	.LVL82:
+ 545:stk500boot.c  **** 	checksum ^= TOKEN;
+ 546:stk500boot.c  **** 
+ 547:stk500boot.c  **** 	p	=	msgBuffer;
+ 599               		.loc 1 547 0
+ 600 01e8 8E01      		movw r16,r28
+ 601 01ea 0F5F      		subi r16,-1
+ 602 01ec 1F4F      		sbci r17,-1
+ 545:stk500boot.c  **** 	checksum ^= TOKEN;
+ 603               		.loc 1 545 0
+ 604 01ee 9FE1      		ldi r25,lo8(31)
+ 605 01f0 792E      		mov r7,r25
+ 467:stk500boot.c  **** int main(void)
+ 606               		.loc 1 467 0
+ 607 01f2 7E01      		movw r14,r28
+ 608 01f4 FCE0      		ldi r31,12
+ 609 01f6 EF0E      		add r14,r31
+ 610 01f8 F11C      		adc r15,__zero_reg__
+ 611               	.LVL83:
+ 612               	.L23:
+ 548:stk500boot.c  **** 	while ( msgLength )
+ 549:stk500boot.c  **** 	{
+ 550:stk500boot.c  **** 		c	=	*p++;
+ 613               		.loc 1 550 0
+ 614 01fa F801      		movw r30,r16
+ 615 01fc D190      		ld r13,Z+
+ 616 01fe 8F01      		movw r16,r30
+ 617               	.LVL84:
+ 551:stk500boot.c  **** 		sendchar(c);
+ 618               		.loc 1 551 0
+ 619 0200 8D2D      		mov r24,r13
+ 620 0202 0E94 0000 		call sendchar
+ 621               	.LVL85:
+ 552:stk500boot.c  **** 		checksum ^=c;
+ 622               		.loc 1 552 0
+ 623 0206 7D24      		eor r7,r13
+ 624               	.LVL86:
+ 548:stk500boot.c  **** 	while ( msgLength )
+ 625               		.loc 1 548 0
+ 626 0208 0E15      		cp r16,r14
+ 627 020a 1F05      		cpc r17,r15
+ 628 020c 01F4      		brne .L23
+ 553:stk500boot.c  **** 		msgLength--;
+ 554:stk500boot.c  **** 	}
+ 555:stk500boot.c  **** 	sendchar(checksum);
+ 629               		.loc 1 555 0
+ 630 020e 872D      		mov r24,r7
+ 631 0210 0E94 0000 		call sendchar
+ 632               	.LVL87:
+ 494:stk500boot.c  **** 	boot_timer	=	0;
+ 633               		.loc 1 494 0
+ 634 0214 40E0      		ldi r20,0
+ 635 0216 50E0      		ldi r21,0
+ 636 0218 BA01      		movw r22,r20
+ 637 021a 00C0      		rjmp .L176
+ 638               	.LVL88:
+ 639               	.L29:
+ 640               	.LBB70:
+ 641               	.LBB71:
+ 642               		.loc 2 164 0
+ 643 021c F5E0      		ldi r31,lo8(5)
+ 644 021e FA95      		1: dec r31
+ 645 0220 01F4      		brne 1b
+ 646 0222 0000      		nop
+ 647               	.LBE71:
+ 648               	.LBE70:
+ 556:stk500boot.c  **** 	seqNum++;
+ 557:stk500boot.c  **** 
+ 558:stk500boot.c  **** 
+ 559:stk500boot.c  **** 	//filled_rect(0,0,128,20,0xff);
+ 560:stk500boot.c  **** 	/////////Kolja bis hier /////////
+ 561:stk500boot.c  **** 
+ 562:stk500boot.c  **** 	while (boot_state==0)
+ 563:stk500boot.c  **** 	{
+ 564:stk500boot.c  **** 		while ((!(Serial_Available())) && (boot_state == 0))		// wait for data
+ 565:stk500boot.c  **** 		{
+ 566:stk500boot.c  **** 			_delay_ms(0.001);
+ 567:stk500boot.c  **** 			/////////Kolja von hier /////////
+ 568:stk500boot.c  **** 			// nur wenn das bit gesetzt ist
+ 569:stk500boot.c  **** 			if(bit_is_set(PINH,3)){
+ 649               		.loc 1 569 0
+ 650 0224 8091 0001 		lds r24,256
+ 651 0228 83FF      		sbrs r24,3
+ 652 022a 00C0      		rjmp .L25
+ 570:stk500boot.c  **** 				/////////Kolja bis hier/////////
+ 571:stk500boot.c  **** 				boot_timer++;
+ 653               		.loc 1 571 0
+ 654 022c 4F5F      		subi r20,-1
+ 655 022e 5F4F      		sbci r21,-1
+ 656 0230 6F4F      		sbci r22,-1
+ 657 0232 7F4F      		sbci r23,-1
+ 658               	.LVL89:
+ 659               	.L25:
+ 572:stk500boot.c  **** 				/////////Kolja von hier /////////
+ 573:stk500boot.c  **** 			}
+ 574:stk500boot.c  **** 			/////////Kolja bis hier /////////
+ 575:stk500boot.c  **** 
+ 576:stk500boot.c  **** 			if (boot_timer > boot_timeout)
+ 660               		.loc 1 576 0
+ 661 0234 A1E0      		ldi r26,lo8(1)
+ 662 0236 B0E0      		ldi r27,0
+ 663               	.LVL90:
+ 664 0238 4139      		cpi r20,-111
+ 665 023a 00ED      		ldi r16,-48
+ 666 023c 5007      		cpc r21,r16
+ 667 023e 03E0      		ldi r16,3
+ 668 0240 6007      		cpc r22,r16
+ 669 0242 7105      		cpc r23,__zero_reg__
+ 670 0244 00F4      		brsh .L31
+ 671               	.LVL91:
+ 672               	.L176:
+ 673 0246 A0E0      		ldi r26,0
+ 674 0248 B0E0      		ldi r27,0
+ 675               	.L31:
+ 676               	.LVL92:
+ 677               	.LBB72:
+ 678               	.LBB73:
+ 261:stk500boot.c  **** 	return(UART_STATUS_REG & (1 << UART_RECEIVE_COMPLETE));	// wait for data
+ 679               		.loc 1 261 0 discriminator 1
+ 680 024a 8091 C000 		lds r24,192
+ 681               	.LBE73:
+ 682               	.LBE72:
+ 564:stk500boot.c  **** 		while ((!(Serial_Available())) && (boot_state == 0))		// wait for data
+ 683               		.loc 1 564 0 discriminator 1
+ 684 024e 87FF      		sbrs r24,7
+ 685 0250 00C0      		rjmp .L27
+ 686               	.L30:
+ 577:stk500boot.c  **** 			{
+ 578:stk500boot.c  **** 				boot_state	=	1; // (after ++ -> boot_state=2 bootloader timeout, jump to main 0x00000 )
+ 579:stk500boot.c  **** 			}
+ 580:stk500boot.c  **** 		}
+ 581:stk500boot.c  **** 		boot_state++; // ( if boot_state=1 bootloader received byte from UART, enter bootloader mode)
+ 687               		.loc 1 581 0
+ 688 0252 1196      		adiw r26,1
+ 689               	.LVL93:
+ 562:stk500boot.c  **** 	while (boot_state==0)
+ 690               		.loc 1 562 0
+ 691 0254 01F0      		breq .L176
+ 692 0256 00C0      		rjmp .L173
+ 693               	.L27:
+ 564:stk500boot.c  **** 		while ((!(Serial_Available())) && (boot_state == 0))		// wait for data
+ 694               		.loc 1 564 0 discriminator 2
+ 695 0258 1097      		sbiw r26,0
+ 696 025a 01F0      		breq .L29
+ 697 025c 00C0      		rjmp .L30
+ 698               	.L173:
+ 582:stk500boot.c  **** 	}
+ 583:stk500boot.c  **** 
+ 584:stk500boot.c  **** 
+ 585:stk500boot.c  **** 	if (boot_state==1)
+ 699               		.loc 1 585 0
+ 700 025e A130      		cpi r26,1
+ 701 0260 B105      		cpc r27,__zero_reg__
+ 702 0262 01F0      		breq .+2
+ 703 0264 00C0      		rjmp .L33
+ 704 0266 00C0      		rjmp .L102
+ 705               	.LVL94:
+ 706               	.L66:
+ 707 0268 A0E0      		ldi r26,0
+ 708 026a B0E0      		ldi r27,0
+ 709               	.LVL95:
+ 710               	.L100:
+ 586:stk500boot.c  **** 	{
+ 587:stk500boot.c  **** 		//*	main loop
+ 588:stk500boot.c  **** 		while (!isLeave)
+ 589:stk500boot.c  **** 		{
+ 590:stk500boot.c  **** 			/*
+ 591:stk500boot.c  **** 			 * Collect received bytes to a complete message
+ 592:stk500boot.c  **** 			 */
+ 593:stk500boot.c  **** 			msgParseState	=	ST_START;
+ 594:stk500boot.c  **** 			while ( msgParseState != ST_PROCESS )
+ 595:stk500boot.c  **** 			{
+ 596:stk500boot.c  **** 				if (boot_state==1)
+ 711               		.loc 1 596 0
+ 712 026c 1197      		sbiw r26,1
+ 713 026e 01F4      		brne .L103
+ 714               	.LVL96:
+ 715 0270 00C0      		rjmp .L177
+ 716               	.LVL97:
+ 717               	.L37:
+ 718               	.LBB74:
+ 719               	.LBB75:
+ 441:stk500boot.c  **** 		count++;
+ 720               		.loc 1 441 0
+ 721 0272 9FEF      		ldi r25,-1
+ 722 0274 C91A      		sub r12,r25
+ 723 0276 D90A      		sbc r13,r25
+ 724 0278 E90A      		sbc r14,r25
+ 725 027a F90A      		sbc r15,r25
+ 726               	.LVL98:
+ 442:stk500boot.c  **** 		if (count > MAX_TIME_COUNT)
+ 727               		.loc 1 442 0
+ 728 027c A1E0      		ldi r26,1
+ 729 027e CA16      		cp r12,r26
+ 730 0280 A2E1      		ldi r26,18
+ 731 0282 DA06      		cpc r13,r26
+ 732 0284 AAE7      		ldi r26,122
+ 733 0286 EA06      		cpc r14,r26
+ 734 0288 F104      		cpc r15,__zero_reg__
+ 735 028a 00F0      		brlo .L172
+ 736               	.LVL99:
+ 737               	.LBB76:
+ 450:stk500boot.c  **** 			if (data != 0xffff)					//*	make sure its valid before jumping to it.
+ 738               		.loc 1 450 0
+ 739 028c CC5D      		subi r28,lo8(-292)
+ 740 028e DE4F      		sbci r29,hi8(-292)
+ 741 0290 E881      		ld r30,Y
+ 742 0292 F981      		ldd r31,Y+1
+ 743 0294 C452      		subi r28,lo8(292)
+ 744 0296 D140      		sbci r29,hi8(292)
+ 745 0298 3196      		adiw r30,1
+ 746 029a 01F0      		breq .L103
+ 452:stk500boot.c  **** 				asm volatile(
+ 747               		.loc 1 452 0
+ 748               	/* #APP */
+ 749               	 ;  452 "stk500boot.c" 1
+ 750 029c EE27      		clr	r30		
+ 751 029e FF27      		clr	r31		
+ 752 02a0 0994      		ijmp	
+ 753               		
+ 754               	 ;  0 "" 2
+ 755               	.LVL100:
+ 756               	/* #NOAPP */
+ 757               	.L103:
+ 758               	.LBE76:
+ 759               	.LBE75:
+ 760               	.LBE74:
+ 761               		.loc 1 596 0
+ 762 02a2 C12C      		mov r12,__zero_reg__
+ 763 02a4 D12C      		mov r13,__zero_reg__
+ 764 02a6 7601      		movw r14,r12
+ 765               	.L172:
+ 766               	.LVL101:
+ 767               	.LBB81:
+ 768               	.LBB79:
+ 438:stk500boot.c  **** 	while (!(UART_STATUS_REG & (1 << UART_RECEIVE_COMPLETE)))
+ 769               		.loc 1 438 0
+ 770 02a8 9091 C000 		lds r25,192
+ 771 02ac 97FF      		sbrs r25,7
+ 772 02ae 00C0      		rjmp .L37
+ 773               	.LVL102:
+ 774               	.L177:
+ 461:stk500boot.c  **** 	return UART_DATA_REG;
+ 775               		.loc 1 461 0
+ 776 02b0 9091 C600 		lds r25,198
+ 777               	.LVL103:
+ 778               	.LBE79:
+ 779               	.LBE81:
+ 597:stk500boot.c  **** 				{
+ 598:stk500boot.c  **** 					boot_state	=	0;
+ 599:stk500boot.c  **** 					c			=	UART_DATA_REG;
+ 600:stk500boot.c  **** 				}
+ 601:stk500boot.c  **** 				else
+ 602:stk500boot.c  **** 				{
+ 603:stk500boot.c  **** 					c	=	recchar_timeout();
+ 604:stk500boot.c  **** 				}
+ 605:stk500boot.c  **** 
+ 606:stk500boot.c  **** 
+ 607:stk500boot.c  **** 
+ 608:stk500boot.c  **** 				switch (msgParseState){
+ 780               		.loc 1 608 0
+ 781 02b4 8330      		cpi r24,lo8(3)
+ 782 02b6 01F0      		breq .L42
+ 783 02b8 00F4      		brsh .L46
+ 784 02ba 8130      		cpi r24,lo8(1)
+ 785 02bc 01F0      		breq .L40
+ 786 02be 00F4      		brsh .L41
+ 787 02c0 00C0      		rjmp .L174
+ 788               	.L46:
+ 789 02c2 8530      		cpi r24,lo8(5)
+ 790 02c4 01F0      		breq .L44
+ 791 02c6 00F0      		brlo .L43
+ 792 02c8 8630      		cpi r24,lo8(6)
+ 793 02ca 01F0      		breq .+2
+ 794 02cc 00C0      		rjmp .L175
+ 795 02ce 00C0      		rjmp .L45
+ 796               	.L174:
+ 609:stk500boot.c  **** 				case ST_START:
+ 610:stk500boot.c  **** 					if ( c == MESSAGE_START )
+ 797               		.loc 1 610 0
+ 798 02d0 9B31      		cpi r25,lo8(27)
+ 799 02d2 01F4      		brne .L66
+ 800 02d4 00C0      		rjmp .L105
+ 801               	.L40:
+ 611:stk500boot.c  **** 					{
+ 612:stk500boot.c  **** 						msgParseState	=	ST_GET_SEQ_NUM;
+ 613:stk500boot.c  **** 						checksum		=	MESSAGE_START^0;
+ 614:stk500boot.c  **** 					}
+ 615:stk500boot.c  **** 					break;
+ 616:stk500boot.c  **** 
+ 617:stk500boot.c  **** 				case ST_GET_SEQ_NUM:
+ 618:stk500boot.c  **** 					if ( (c == 1) || (c == seqNum) )
+ 802               		.loc 1 618 0
+ 803 02d6 9130      		cpi r25,lo8(1)
+ 804 02d8 01F0      		breq .L48
+ 805               		.loc 1 618 0 is_stmt 0 discriminator 1
+ 806 02da 9113      		cpse r25,r17
+ 807 02dc 00C0      		rjmp .L109
+ 808               	.L48:
+ 809               	.LVL104:
+ 619:stk500boot.c  **** 					{
+ 620:stk500boot.c  **** 						seqNum			=	c;
+ 621:stk500boot.c  **** 						msgParseState	=	ST_MSG_SIZE_1;
+ 622:stk500boot.c  **** 						checksum		^=	c;
+ 810               		.loc 1 622 0 is_stmt 1
+ 811 02de 7926      		eor r7,r25
+ 812               	.LVL105:
+ 813 02e0 192F      		mov r17,r25
+ 621:stk500boot.c  **** 						msgParseState	=	ST_MSG_SIZE_1;
+ 814               		.loc 1 621 0
+ 815 02e2 82E0      		ldi r24,lo8(2)
+ 816               		.loc 1 622 0
+ 817 02e4 00C0      		rjmp .L66
+ 818               	.LVL106:
+ 819               	.L41:
+ 623:stk500boot.c  **** 					}
+ 624:stk500boot.c  **** 					else
+ 625:stk500boot.c  **** 					{
+ 626:stk500boot.c  **** 						msgParseState	=	ST_START;
+ 627:stk500boot.c  **** 					}
+ 628:stk500boot.c  **** 					break;
+ 629:stk500boot.c  **** 
+ 630:stk500boot.c  **** 				case ST_MSG_SIZE_1:
+ 631:stk500boot.c  **** 					msgLength		=	c<<8;
+ 820               		.loc 1 631 0
+ 821 02e6 792F      		mov r23,r25
+ 822 02e8 60E0      		ldi r22,0
+ 823               	.LVL107:
+ 632:stk500boot.c  **** 					msgParseState	=	ST_MSG_SIZE_2;
+ 633:stk500boot.c  **** 					checksum		^=	c;
+ 824               		.loc 1 633 0
+ 825 02ea 7926      		eor r7,r25
+ 826               	.LVL108:
+ 632:stk500boot.c  **** 					msgParseState	=	ST_MSG_SIZE_2;
+ 827               		.loc 1 632 0
+ 828 02ec 83E0      		ldi r24,lo8(3)
+ 634:stk500boot.c  **** 					break;
+ 829               		.loc 1 634 0
+ 830 02ee 00C0      		rjmp .L66
+ 831               	.LVL109:
+ 832               	.L42:
+ 635:stk500boot.c  **** 
+ 636:stk500boot.c  **** 				case ST_MSG_SIZE_2:
+ 637:stk500boot.c  **** 					msgLength		|=	c;
+ 833               		.loc 1 637 0
+ 834 02f0 692B      		or r22,r25
+ 835               	.LVL110:
+ 638:stk500boot.c  **** 					msgParseState	=	ST_GET_TOKEN;
+ 639:stk500boot.c  **** 					checksum		^=	c;
+ 836               		.loc 1 639 0
+ 837 02f2 7926      		eor r7,r25
+ 838               	.LVL111:
+ 638:stk500boot.c  **** 					msgParseState	=	ST_GET_TOKEN;
+ 839               		.loc 1 638 0
+ 840 02f4 84E0      		ldi r24,lo8(4)
+ 640:stk500boot.c  **** 					break;
+ 841               		.loc 1 640 0
+ 842 02f6 00C0      		rjmp .L66
+ 843               	.LVL112:
+ 844               	.L43:
+ 641:stk500boot.c  **** 
+ 642:stk500boot.c  **** 				case ST_GET_TOKEN:
+ 643:stk500boot.c  **** 					if ( c == TOKEN )
+ 845               		.loc 1 643 0
+ 846 02f8 9E30      		cpi r25,lo8(14)
+ 847 02fa 01F0      		breq .+2
+ 848 02fc 00C0      		rjmp .L109
+ 849               	.LVL113:
+ 644:stk500boot.c  **** 					{
+ 645:stk500boot.c  **** 						msgParseState	=	ST_GET_DATA;
+ 646:stk500boot.c  **** 						checksum		^=	c;
+ 850               		.loc 1 646 0
+ 851 02fe 7926      		eor r7,r25
+ 852               	.LVL114:
+ 647:stk500boot.c  **** 						ii				=	0;
+ 853               		.loc 1 647 0
+ 854 0300 212C      		mov r2,__zero_reg__
+ 855 0302 312C      		mov r3,__zero_reg__
+ 645:stk500boot.c  **** 						msgParseState	=	ST_GET_DATA;
+ 856               		.loc 1 645 0
+ 857 0304 85E0      		ldi r24,lo8(5)
+ 858 0306 00C0      		rjmp .L66
+ 859               	.LVL115:
+ 860               	.L44:
+ 648:stk500boot.c  **** 					}
+ 649:stk500boot.c  **** 					else
+ 650:stk500boot.c  **** 					{
+ 651:stk500boot.c  **** 						msgParseState	=	ST_START;
+ 652:stk500boot.c  **** 					}
+ 653:stk500boot.c  **** 					break;
+ 654:stk500boot.c  **** 
+ 655:stk500boot.c  **** 				case ST_GET_DATA:
+ 656:stk500boot.c  **** 					msgBuffer[ii++]	=	c;
+ 861               		.loc 1 656 0
+ 862 0308 E1E0      		ldi r30,lo8(1)
+ 863 030a F0E0      		ldi r31,0
+ 864 030c EC0F      		add r30,r28
+ 865 030e FD1F      		adc r31,r29
+ 866 0310 E20D      		add r30,r2
+ 867 0312 F31D      		adc r31,r3
+ 868 0314 9083      		st Z,r25
+ 869 0316 AFEF      		ldi r26,-1
+ 870 0318 2A1A      		sub r2,r26
+ 871 031a 3A0A      		sbc r3,r26
+ 872               	.LVL116:
+ 657:stk500boot.c  **** 					checksum		^=	c;
+ 873               		.loc 1 657 0
+ 874 031c 7926      		eor r7,r25
+ 875               	.LVL117:
+ 658:stk500boot.c  **** 					if (ii == msgLength )
+ 876               		.loc 1 658 0
+ 877 031e 2616      		cp r2,r22
+ 878 0320 3706      		cpc r3,r23
+ 879 0322 01F0      		breq .+2
+ 880 0324 00C0      		rjmp .L66
+ 881 0326 00C0      		rjmp .L108
+ 882               	.LVL118:
+ 883               	.L45:
+ 659:stk500boot.c  **** 					{
+ 660:stk500boot.c  **** 						msgParseState	=	ST_GET_CHECK;
+ 661:stk500boot.c  **** 					}
+ 662:stk500boot.c  **** 					break;
+ 663:stk500boot.c  **** 
+ 664:stk500boot.c  **** 				case ST_GET_CHECK:
+ 665:stk500boot.c  **** 					if ( c == checksum )
+ 884               		.loc 1 665 0
+ 885 0328 9711      		cpse r25,r7
+ 886 032a 00C0      		rjmp .L109
+ 887               	.L67:
+ 666:stk500boot.c  **** 					{
+ 667:stk500boot.c  **** 						msgParseState	=	ST_PROCESS;
+ 668:stk500boot.c  **** 					}
+ 669:stk500boot.c  **** 					else
+ 670:stk500boot.c  **** 					{
+ 671:stk500boot.c  **** 						msgParseState	=	ST_START;
+ 672:stk500boot.c  **** 					}
+ 673:stk500boot.c  **** 					break;
+ 674:stk500boot.c  **** 				}	//	switch
+ 675:stk500boot.c  **** 			}	//	while(msgParseState)
+ 676:stk500boot.c  **** 
+ 677:stk500boot.c  **** 			/*
+ 678:stk500boot.c  **** 			 * Now process the STK500 commands, see Atmel Appnote AVR068
+ 679:stk500boot.c  **** 			 */
+ 680:stk500boot.c  **** 
+ 681:stk500boot.c  **** 			switch (msgBuffer[0]){
+ 888               		.loc 1 681 0
+ 889 032c E981      		ldd r30,Y+1
+ 890 032e E331      		cpi r30,lo8(19)
+ 891 0330 01F4      		brne .+2
+ 892 0332 00C0      		rjmp .L56
+ 893 0334 00F4      		brsh .L63
+ 894 0336 E630      		cpi r30,lo8(6)
+ 895 0338 01F4      		brne .+2
+ 896 033a 00C0      		rjmp .L53
+ 897 033c 00F4      		brsh .L64
+ 898 033e E230      		cpi r30,lo8(2)
+ 899 0340 01F4      		brne .+2
+ 900 0342 00C0      		rjmp .L184
+ 901 0344 E330      		cpi r30,lo8(3)
+ 902 0346 01F4      		brne .+2
+ 903 0348 00C0      		rjmp .L52
+ 904 034a E130      		cpi r30,lo8(1)
+ 905 034c 01F0      		breq .+2
+ 906 034e 00C0      		rjmp .L49
+ 907 0350 00C0      		rjmp .L50
+ 908               	.L64:
+ 909 0352 E131      		cpi r30,lo8(17)
+ 910 0354 01F4      		brne .+2
+ 911 0356 00C0      		rjmp .L54
+ 912 0358 00F0      		brlo .+2
+ 913 035a 00C0      		rjmp .L55
+ 914 035c E031      		cpi r30,lo8(16)
+ 915 035e 01F0      		breq .+2
+ 916 0360 00C0      		rjmp .L49
+ 917 0362 00C0      		rjmp .L184
+ 918               	.L63:
+ 919 0364 E831      		cpi r30,lo8(24)
+ 920 0366 01F4      		brne .+2
+ 921 0368 00C0      		rjmp .L58
+ 922 036a 00F4      		brsh .L65
+ 923 036c E531      		cpi r30,lo8(21)
+ 924 036e 01F4      		brne .+2
+ 925 0370 00C0      		rjmp .L56
+ 926 0372 00F4      		brsh .+2
+ 927 0374 00C0      		rjmp .L57
+ 928 0376 E631      		cpi r30,lo8(22)
+ 929 0378 01F0      		breq .+2
+ 930 037a 00C0      		rjmp .L49
+ 931 037c 00C0      		rjmp .L57
+ 932               	.L65:
+ 933 037e EA31      		cpi r30,lo8(26)
+ 934 0380 01F4      		brne .+2
+ 935 0382 00C0      		rjmp .L60
+ 936 0384 00F4      		brsh .+2
+ 937 0386 00C0      		rjmp .L59
+ 938 0388 EB31      		cpi r30,lo8(27)
+ 939 038a 01F4      		brne .+2
+ 940 038c 00C0      		rjmp .L61
+ 941 038e ED31      		cpi r30,lo8(29)
+ 942 0390 01F0      		breq .+2
+ 943 0392 00C0      		rjmp .L49
+ 944 0394 00C0      		rjmp .L62
+ 945               	.L175:
+ 946               	.LVL119:
+ 594:stk500boot.c  **** 			while ( msgParseState != ST_PROCESS )
+ 947               		.loc 1 594 0 discriminator 1
+ 948 0396 8730      		cpi r24,lo8(7)
+ 949 0398 01F0      		breq .L67
+ 950 039a 00C0      		rjmp .L66
+ 951               	.LVL120:
+ 952               	.L62:
+ 953               	.LBB82:
+ 682:stk500boot.c  **** 			case CMD_SPI_MULTI:
+ 683:stk500boot.c  **** 			{
+ 684:stk500boot.c  **** 				unsigned char answerByte;
+ 685:stk500boot.c  **** 				unsigned char flag=0;
+ 686:stk500boot.c  **** 
+ 687:stk500boot.c  **** 				if ( msgBuffer[4]== 0x30 )
+ 954               		.loc 1 687 0
+ 955 039c ED80      		ldd r14,Y+5
+ 956 039e E0E3      		ldi r30,lo8(48)
+ 957 03a0 EE12      		cpse r14,r30
+ 958 03a2 00C0      		rjmp .L110
+ 959               	.LBB83:
+ 688:stk500boot.c  **** 				{
+ 689:stk500boot.c  **** 					unsigned char signatureIndex = msgBuffer[6];
+ 960               		.loc 1 689 0
+ 961 03a4 8F81      		ldd r24,Y+7
+ 962               	.LVL121:
+ 690:stk500boot.c  **** 
+ 691:stk500boot.c  **** 					if ( signatureIndex == 0 ){
+ 963               		.loc 1 691 0
+ 964 03a6 8111      		cpse r24,__zero_reg__
+ 965 03a8 00C0      		rjmp .L69
+ 692:stk500boot.c  **** 						draw_line(0,LOADING_Y,128);
+ 966               		.loc 1 692 0
+ 967 03aa 87E3      		ldi r24,lo8(55)
+ 968               	.LVL122:
+ 969 03ac C85D      		subi r28,lo8(-296)
+ 970 03ae DE4F      		sbci r29,hi8(-296)
+ 971 03b0 2883      		st Y,r18
+ 972 03b2 C852      		subi r28,lo8(296)
+ 973 03b4 D140      		sbci r29,hi8(296)
+ 974 03b6 C75D      		subi r28,lo8(-297)
+ 975 03b8 DE4F      		sbci r29,hi8(-297)
+ 976 03ba 3883      		st Y,r19
+ 977 03bc C952      		subi r28,lo8(297)
+ 978 03be D140      		sbci r29,hi8(297)
+ 979 03c0 C65D      		subi r28,lo8(-298)
+ 980 03c2 DE4F      		sbci r29,hi8(-298)
+ 981 03c4 4883      		st Y,r20
+ 982 03c6 CA52      		subi r28,lo8(298)
+ 983 03c8 D140      		sbci r29,hi8(298)
+ 984 03ca C55D      		subi r28,lo8(-299)
+ 985 03cc DE4F      		sbci r29,hi8(-299)
+ 986 03ce 5883      		st Y,r21
+ 987 03d0 CB52      		subi r28,lo8(299)
+ 988 03d2 D140      		sbci r29,hi8(299)
+ 989 03d4 0E94 0000 		call draw_line.constprop.0
+ 990               	.LVL123:
+ 693:stk500boot.c  **** 						draw_line(0,LOADING_Y+4,128);
+ 991               		.loc 1 693 0
+ 992 03d8 8BE3      		ldi r24,lo8(59)
+ 993 03da 0E94 0000 		call draw_line.constprop.0
+ 994               	.LVL124:
+ 694:stk500boot.c  **** 						// top optimize it written by hand:
+ 695:stk500boot.c  **** 						send_command(0x15);
+ 995               		.loc 1 695 0
+ 996 03de 85E1      		ldi r24,lo8(21)
+ 997 03e0 0E94 0000 		call send_command
+ 998               	.LVL125:
+ 696:stk500boot.c  **** 						send_command(0);
+ 999               		.loc 1 696 0
+ 1000 03e4 80E0      		ldi r24,0
+ 1001 03e6 0E94 0000 		call send_command
+ 1002               	.LVL126:
+ 697:stk500boot.c  **** 						send_command(0);
+ 1003               		.loc 1 697 0
+ 1004 03ea 80E0      		ldi r24,0
+ 1005 03ec 0E94 0000 		call send_command
+ 1006               	.LVL127:
+ 698:stk500boot.c  **** 						send_command(0x75);
+ 1007               		.loc 1 698 0
+ 1008 03f0 85E7      		ldi r24,lo8(117)
+ 1009 03f2 0E94 0000 		call send_command
+ 1010               	.LVL128:
+ 699:stk500boot.c  **** 						send_command(LOADING_Y+1);
+ 1011               		.loc 1 699 0
+ 1012 03f6 88E3      		ldi r24,lo8(56)
+ 1013 03f8 0E94 0000 		call send_command
+ 1014               	.LVL129:
+ 700:stk500boot.c  **** 						send_command(LOADING_Y+3);
+ 1015               		.loc 1 700 0
+ 1016 03fc 8AE3      		ldi r24,lo8(58)
+ 1017 03fe 0E94 0000 		call send_command
+ 1018               	.LVL130:
+ 701:stk500boot.c  **** 						send_char(0xf0);
+ 1019               		.loc 1 701 0
+ 1020 0402 80EF      		ldi r24,lo8(-16)
+ 1021 0404 0E94 0000 		call send_char
+ 1022               	.LVL131:
+ 702:stk500boot.c  **** 						send_char(0xf0);
+ 1023               		.loc 1 702 0
+ 1024 0408 80EF      		ldi r24,lo8(-16)
+ 1025 040a 0E94 0000 		call send_char
+ 1026               	.LVL132:
+ 703:stk500boot.c  **** 						send_char(0xf0);
+ 1027               		.loc 1 703 0
+ 1028 040e 80EF      		ldi r24,lo8(-16)
+ 1029 0410 0E94 0000 		call send_char
+ 1030               	.LVL133:
+ 704:stk500boot.c  **** 
+ 705:stk500boot.c  **** 						send_command(0x15);
+ 1031               		.loc 1 705 0
+ 1032 0414 85E1      		ldi r24,lo8(21)
+ 1033 0416 0E94 0000 		call send_command
+ 1034               	.LVL134:
+ 706:stk500boot.c  **** 						send_command(63);
+ 1035               		.loc 1 706 0
+ 1036 041a 8FE3      		ldi r24,lo8(63)
+ 1037 041c 0E94 0000 		call send_command
+ 1038               	.LVL135:
+ 707:stk500boot.c  **** 						send_command(64);
+ 1039               		.loc 1 707 0
+ 1040 0420 80E4      		ldi r24,lo8(64)
+ 1041 0422 0E94 0000 		call send_command
+ 1042               	.LVL136:
+ 708:stk500boot.c  **** 						send_command(0x75);
+ 1043               		.loc 1 708 0
+ 1044 0426 85E7      		ldi r24,lo8(117)
+ 1045 0428 0E94 0000 		call send_command
+ 1046               	.LVL137:
+ 709:stk500boot.c  **** 						send_command(LOADING_Y+1);
+ 1047               		.loc 1 709 0
+ 1048 042c 88E3      		ldi r24,lo8(56)
+ 1049 042e 0E94 0000 		call send_command
+ 1050               	.LVL138:
+ 710:stk500boot.c  **** 						send_command(LOADING_Y+3);
+ 1051               		.loc 1 710 0
+ 1052 0432 8AE3      		ldi r24,lo8(58)
+ 1053 0434 0E94 0000 		call send_command
+ 1054               	.LVL139:
+ 711:stk500boot.c  **** 						send_char(0x0f);
+ 1055               		.loc 1 711 0
+ 1056 0438 8FE0      		ldi r24,lo8(15)
+ 1057 043a 0E94 0000 		call send_char
+ 1058               	.LVL140:
+ 712:stk500boot.c  **** 						send_char(0x0f);
+ 1059               		.loc 1 712 0
+ 1060 043e 8FE0      		ldi r24,lo8(15)
+ 1061 0440 0E94 0000 		call send_char
+ 1062               	.LVL141:
+ 713:stk500boot.c  **** 						send_char(0x0f);
+ 1063               		.loc 1 713 0
+ 1064 0444 8FE0      		ldi r24,lo8(15)
+ 1065 0446 0E94 0000 		call send_char
+ 1066               	.LVL142:
+ 375:stk500boot.c  **** 	unsigned char x=15;
+ 1067               		.loc 1 375 0
+ 1068 044a 0FE0      		ldi r16,lo8(15)
+ 379:stk500boot.c  **** 	for(a=0;a<9;a++){
+ 1069               		.loc 1 379 0
+ 1070 044c F12C      		mov r15,__zero_reg__
+ 381:stk500boot.c  **** 			buchstabe=5;
+ 1071               		.loc 1 381 0
+ 1072 044e 95E0      		ldi r25,lo8(5)
+ 1073 0450 C85D      		subi r28,lo8(-296)
+ 1074 0452 DE4F      		sbci r29,hi8(-296)
+ 1075 0454 2881      		ld r18,Y
+ 1076 0456 C852      		subi r28,lo8(296)
+ 1077 0458 D140      		sbci r29,hi8(296)
+ 1078 045a C75D      		subi r28,lo8(-297)
+ 1079 045c DE4F      		sbci r29,hi8(-297)
+ 1080 045e 3881      		ld r19,Y
+ 1081 0460 C952      		subi r28,lo8(297)
+ 1082 0462 D140      		sbci r29,hi8(297)
+ 1083 0464 C65D      		subi r28,lo8(-298)
+ 1084 0466 DE4F      		sbci r29,hi8(-298)
+ 1085 0468 4881      		ld r20,Y
+ 1086 046a CA52      		subi r28,lo8(298)
+ 1087 046c D140      		sbci r29,hi8(298)
+ 1088 046e C55D      		subi r28,lo8(-299)
+ 1089 0470 DE4F      		sbci r29,hi8(-299)
+ 1090 0472 5881      		ld r21,Y
+ 1091 0474 CB52      		subi r28,lo8(299)
+ 1092 0476 D140      		sbci r29,hi8(299)
+ 1093 0478 00C0      		rjmp .L70
+ 1094               	.LVL143:
+ 1095               	.L79:
+ 1096               	.LBB84:
+ 1097               	.LBB85:
+ 382:stk500boot.c  **** 		} else if(a==1){ // P
+ 1098               		.loc 1 382 0
+ 1099 047a 8130      		cpi r24,lo8(1)
+ 1100 047c 01F0      		breq .L111
+ 384:stk500boot.c  **** 		} else if(a==2 || a==3){ // E
+ 1101               		.loc 1 384 0
+ 1102 047e 9F2D      		mov r25,r15
+ 1103 0480 9150      		subi r25,lo8(-(-1))
+ 1104 0482 9230      		cpi r25,lo8(2)
+ 1105 0484 00F0      		brlo .L112
+ 386:stk500boot.c  **** 		} else if(a==4){ // D
+ 1106               		.loc 1 386 0
+ 1107 0486 8430      		cpi r24,lo8(4)
+ 1108 0488 01F0      		breq .L113
+ 388:stk500boot.c  **** 		} else if(a==5 || a==8){ // O
+ 1109               		.loc 1 388 0
+ 1110 048a 8530      		cpi r24,lo8(5)
+ 1111 048c 01F0      		breq .L115
+ 1112 048e 8830      		cpi r24,lo8(8)
+ 1113 0490 01F0      		breq .L115
+ 390:stk500boot.c  **** 		} else if(a==6){ // I
+ 1114               		.loc 1 390 0
+ 1115 0492 8630      		cpi r24,lo8(6)
+ 1116 0494 01F0      		breq .L116
+ 393:stk500boot.c  **** 			buchstabe=3;
+ 1117               		.loc 1 393 0
+ 1118 0496 93E0      		ldi r25,lo8(3)
+ 1119 0498 00C0      		rjmp .L71
+ 1120               	.L111:
+ 383:stk500boot.c  **** 			buchstabe=6;
+ 1121               		.loc 1 383 0
+ 1122 049a 96E0      		ldi r25,lo8(6)
+ 1123 049c 00C0      		rjmp .L71
+ 1124               	.L112:
+ 385:stk500boot.c  **** 			buchstabe=0;
+ 1125               		.loc 1 385 0
+ 1126 049e 90E0      		ldi r25,0
+ 1127 04a0 00C0      		rjmp .L71
+ 1128               	.L113:
+ 387:stk500boot.c  **** 			buchstabe=1;
+ 1129               		.loc 1 387 0
+ 1130 04a2 91E0      		ldi r25,lo8(1)
+ 1131 04a4 00C0      		rjmp .L71
+ 1132               	.L115:
+ 389:stk500boot.c  **** 			buchstabe=4;
+ 1133               		.loc 1 389 0
+ 1134 04a6 94E0      		ldi r25,lo8(4)
+ 1135 04a8 00C0      		rjmp .L71
+ 1136               	.L116:
+ 391:stk500boot.c  **** 			buchstabe=2;
+ 1137               		.loc 1 391 0
+ 1138 04aa 92E0      		ldi r25,lo8(2)
+ 1139               	.L71:
+ 379:stk500boot.c  **** 	for(a=0;a<9;a++){
+ 1140               		.loc 1 379 0
+ 1141 04ac F82E      		mov r15,r24
+ 1142               	.LVL144:
+ 1143               	.L70:
+ 396:stk500boot.c  **** 		send_command(0x15);
+ 1144               		.loc 1 396 0
+ 1145 04ae 85E1      		ldi r24,lo8(21)
+ 1146 04b0 C85D      		subi r28,lo8(-296)
+ 1147 04b2 DE4F      		sbci r29,hi8(-296)
+ 1148 04b4 2883      		st Y,r18
+ 1149 04b6 C852      		subi r28,lo8(296)
+ 1150 04b8 D140      		sbci r29,hi8(296)
+ 1151 04ba C75D      		subi r28,lo8(-297)
+ 1152 04bc DE4F      		sbci r29,hi8(-297)
+ 1153 04be 3883      		st Y,r19
+ 1154 04c0 C952      		subi r28,lo8(297)
+ 1155 04c2 D140      		sbci r29,hi8(297)
+ 1156 04c4 C65D      		subi r28,lo8(-298)
+ 1157 04c6 DE4F      		sbci r29,hi8(-298)
+ 1158 04c8 4883      		st Y,r20
+ 1159 04ca CA52      		subi r28,lo8(298)
+ 1160 04cc D140      		sbci r29,hi8(298)
+ 1161 04ce C55D      		subi r28,lo8(-299)
+ 1162 04d0 DE4F      		sbci r29,hi8(-299)
+ 1163 04d2 5883      		st Y,r21
+ 1164 04d4 CB52      		subi r28,lo8(299)
+ 1165 04d6 D140      		sbci r29,hi8(299)
+ 1166 04d8 CA5D      		subi r28,lo8(-294)
+ 1167 04da DE4F      		sbci r29,hi8(-294)
+ 1168 04dc 9883      		st Y,r25
+ 1169 04de C652      		subi r28,lo8(294)
+ 1170 04e0 D140      		sbci r29,hi8(294)
+ 1171 04e2 0E94 0000 		call send_command
+ 1172               	.LVL145:
+ 397:stk500boot.c  **** 		send_command(x);
+ 1173               		.loc 1 397 0
+ 1174 04e6 802F      		mov r24,r16
+ 1175 04e8 0E94 0000 		call send_command
+ 1176               	.LVL146:
+ 398:stk500boot.c  **** 		send_command(x+2); // buchstaben sind 5px breit + spacer
+ 1177               		.loc 1 398 0
+ 1178 04ec 802F      		mov r24,r16
+ 1179 04ee 8E5F      		subi r24,lo8(-(2))
+ 1180 04f0 0E94 0000 		call send_command
+ 1181               	.LVL147:
+ 399:stk500boot.c  **** 		send_command(0x75);
+ 1182               		.loc 1 399 0
+ 1183 04f4 85E7      		ldi r24,lo8(117)
+ 1184 04f6 0E94 0000 		call send_command
+ 1185               	.LVL148:
+ 400:stk500boot.c  **** 		send_command(y);
+ 1186               		.loc 1 400 0
+ 1187 04fa 8FE2      		ldi r24,lo8(47)
+ 1188 04fc 0E94 0000 		call send_command
+ 1189               	.LVL149:
+ 401:stk500boot.c  **** 		send_command(y+5); // und 5 px hoch
+ 1190               		.loc 1 401 0
+ 1191 0500 84E3      		ldi r24,lo8(52)
+ 1192 0502 0E94 0000 		call send_command
+ 1193               	.LVL150:
+ 403:stk500boot.c  **** 		buchstabe=buchstabe*6;
+ 1194               		.loc 1 403 0
+ 1195 0506 CA5D      		subi r28,lo8(-294)
+ 1196 0508 DE4F      		sbci r29,hi8(-294)
+ 1197 050a 9881      		ld r25,Y
+ 1198 050c C652      		subi r28,lo8(294)
+ 1199 050e D140      		sbci r29,hi8(294)
+ 1200 0510 C92E      		mov r12,r25
+ 1201 0512 CC0C      		lsl r12
+ 1202 0514 C90E      		add r12,r25
+ 1203 0516 CC0C      		lsl r12
+ 1204               	.LVL151:
+ 467:stk500boot.c  **** int main(void)
+ 1205               		.loc 1 467 0
+ 1206 0518 86E0      		ldi r24,lo8(6)
+ 1207 051a D82E      		mov r13,r24
+ 1208 051c DC0C      		add r13,r12
+ 1209 051e C55D      		subi r28,lo8(-299)
+ 1210 0520 DE4F      		sbci r29,hi8(-299)
+ 1211 0522 5881      		ld r21,Y
+ 1212 0524 CB52      		subi r28,lo8(299)
+ 1213 0526 D140      		sbci r29,hi8(299)
+ 1214 0528 C65D      		subi r28,lo8(-298)
+ 1215 052a DE4F      		sbci r29,hi8(-298)
+ 1216 052c 4881      		ld r20,Y
+ 1217 052e CA52      		subi r28,lo8(298)
+ 1218 0530 D140      		sbci r29,hi8(298)
+ 1219 0532 C75D      		subi r28,lo8(-297)
+ 1220 0534 DE4F      		sbci r29,hi8(-297)
+ 1221 0536 3881      		ld r19,Y
+ 1222 0538 C952      		subi r28,lo8(297)
+ 1223 053a D140      		sbci r29,hi8(297)
+ 1224 053c C85D      		subi r28,lo8(-296)
+ 1225 053e DE4F      		sbci r29,hi8(-296)
+ 1226 0540 2881      		ld r18,Y
+ 1227 0542 C852      		subi r28,lo8(296)
+ 1228 0544 D140      		sbci r29,hi8(296)
+ 1229               	.LVL152:
+ 1230               	.L78:
+ 405:stk500boot.c  **** 			data=speedoino_data[buchstabe];
+ 1231               		.loc 1 405 0
+ 1232 0546 EC2D      		mov r30,r12
+ 1233 0548 F0E0      		ldi r31,0
+ 1234 054a E050      		subi r30,lo8(-(speedoino_data))
+ 1235 054c F040      		sbci r31,hi8(-(speedoino_data))
+ 1236 054e 7080      		ld r7,Z
+ 1237               	.LVL153:
+ 406:stk500boot.c  **** 			buchstabe++;
+ 1238               		.loc 1 406 0
+ 1239 0550 C394      		inc r12
+ 1240               	.LVL154:
+ 409:stk500boot.c  **** 			if(data&0b10000000)	send_me|=0xf0;
+ 1241               		.loc 1 409 0
+ 1242 0552 77FC      		sbrc r7,7
+ 1243 0554 00C0      		rjmp .L117
+ 408:stk500boot.c  **** 			send_me=0x00;
+ 1244               		.loc 1 408 0
+ 1245 0556 80E0      		ldi r24,0
+ 1246 0558 00C0      		rjmp .L72
+ 1247               	.L117:
+ 409:stk500boot.c  **** 			if(data&0b10000000)	send_me|=0xf0;
+ 1248               		.loc 1 409 0
+ 1249 055a 80EF      		ldi r24,lo8(-16)
+ 1250               	.L72:
+ 1251               	.LVL155:
+ 410:stk500boot.c  **** 			if(data&0b01000000)	send_me|=0x0f;
+ 1252               		.loc 1 410 0
+ 1253 055c 76FC      		sbrc r7,6
+ 1254 055e 8F60      		ori r24,lo8(15)
+ 1255               	.LVL156:
+ 1256               	.L73:
+ 411:stk500boot.c  **** 			send_char(send_me);
+ 1257               		.loc 1 411 0
+ 1258 0560 C85D      		subi r28,lo8(-296)
+ 1259 0562 DE4F      		sbci r29,hi8(-296)
+ 1260 0564 2883      		st Y,r18
+ 1261 0566 C852      		subi r28,lo8(296)
+ 1262 0568 D140      		sbci r29,hi8(296)
+ 1263 056a C75D      		subi r28,lo8(-297)
+ 1264 056c DE4F      		sbci r29,hi8(-297)
+ 1265 056e 3883      		st Y,r19
+ 1266 0570 C952      		subi r28,lo8(297)
+ 1267 0572 D140      		sbci r29,hi8(297)
+ 1268 0574 C65D      		subi r28,lo8(-298)
+ 1269 0576 DE4F      		sbci r29,hi8(-298)
+ 1270 0578 4883      		st Y,r20
+ 1271 057a CA52      		subi r28,lo8(298)
+ 1272 057c D140      		sbci r29,hi8(298)
+ 1273 057e C55D      		subi r28,lo8(-299)
+ 1274 0580 DE4F      		sbci r29,hi8(-299)
+ 1275 0582 5883      		st Y,r21
+ 1276 0584 CB52      		subi r28,lo8(299)
+ 1277 0586 D140      		sbci r29,hi8(299)
+ 1278 0588 0E94 0000 		call send_char
+ 1279               	.LVL157:
+ 414:stk500boot.c  **** 			if(data&0b00100000)	send_me|=0xf0;
+ 1280               		.loc 1 414 0
+ 1281 058c C85D      		subi r28,lo8(-296)
+ 1282 058e DE4F      		sbci r29,hi8(-296)
+ 1283 0590 2881      		ld r18,Y
+ 1284 0592 C852      		subi r28,lo8(296)
+ 1285 0594 D140      		sbci r29,hi8(296)
+ 1286 0596 C75D      		subi r28,lo8(-297)
+ 1287 0598 DE4F      		sbci r29,hi8(-297)
+ 1288 059a 3881      		ld r19,Y
+ 1289 059c C952      		subi r28,lo8(297)
+ 1290 059e D140      		sbci r29,hi8(297)
+ 1291 05a0 C65D      		subi r28,lo8(-298)
+ 1292 05a2 DE4F      		sbci r29,hi8(-298)
+ 1293 05a4 4881      		ld r20,Y
+ 1294 05a6 CA52      		subi r28,lo8(298)
+ 1295 05a8 D140      		sbci r29,hi8(298)
+ 1296 05aa C55D      		subi r28,lo8(-299)
+ 1297 05ac DE4F      		sbci r29,hi8(-299)
+ 1298 05ae 5881      		ld r21,Y
+ 1299 05b0 CB52      		subi r28,lo8(299)
+ 1300 05b2 D140      		sbci r29,hi8(299)
+ 1301 05b4 75FE      		sbrs r7,5
+ 1302 05b6 00C0      		rjmp .L118
+ 1303 05b8 80EF      		ldi r24,lo8(-16)
+ 1304 05ba 00C0      		rjmp .L74
+ 1305               	.L118:
+ 413:stk500boot.c  **** 			send_me=0x00;
+ 1306               		.loc 1 413 0
+ 1307 05bc 80E0      		ldi r24,0
+ 1308               	.L74:
+ 1309               	.LVL158:
+ 415:stk500boot.c  **** 			if(data&0b00010000)	send_me|=0x0f;
+ 1310               		.loc 1 415 0
+ 1311 05be 74FC      		sbrc r7,4
+ 1312 05c0 8F60      		ori r24,lo8(15)
+ 1313               	.LVL159:
+ 1314               	.L75:
+ 416:stk500boot.c  **** 			send_char(send_me);
+ 1315               		.loc 1 416 0
+ 1316 05c2 C85D      		subi r28,lo8(-296)
+ 1317 05c4 DE4F      		sbci r29,hi8(-296)
+ 1318 05c6 2883      		st Y,r18
+ 1319 05c8 C852      		subi r28,lo8(296)
+ 1320 05ca D140      		sbci r29,hi8(296)
+ 1321 05cc C75D      		subi r28,lo8(-297)
+ 1322 05ce DE4F      		sbci r29,hi8(-297)
+ 1323 05d0 3883      		st Y,r19
+ 1324 05d2 C952      		subi r28,lo8(297)
+ 1325 05d4 D140      		sbci r29,hi8(297)
+ 1326 05d6 C65D      		subi r28,lo8(-298)
+ 1327 05d8 DE4F      		sbci r29,hi8(-298)
+ 1328 05da 4883      		st Y,r20
+ 1329 05dc CA52      		subi r28,lo8(298)
+ 1330 05de D140      		sbci r29,hi8(298)
+ 1331 05e0 C55D      		subi r28,lo8(-299)
+ 1332 05e2 DE4F      		sbci r29,hi8(-299)
+ 1333 05e4 5883      		st Y,r21
+ 1334 05e6 CB52      		subi r28,lo8(299)
+ 1335 05e8 D140      		sbci r29,hi8(299)
+ 1336 05ea 0E94 0000 		call send_char
+ 1337               	.LVL160:
+ 419:stk500boot.c  **** 			if(data&0b00001000)	send_me|=0xf0;
+ 1338               		.loc 1 419 0
+ 1339 05ee C85D      		subi r28,lo8(-296)
+ 1340 05f0 DE4F      		sbci r29,hi8(-296)
+ 1341 05f2 2881      		ld r18,Y
+ 1342 05f4 C852      		subi r28,lo8(296)
+ 1343 05f6 D140      		sbci r29,hi8(296)
+ 1344 05f8 C75D      		subi r28,lo8(-297)
+ 1345 05fa DE4F      		sbci r29,hi8(-297)
+ 1346 05fc 3881      		ld r19,Y
+ 1347 05fe C952      		subi r28,lo8(297)
+ 1348 0600 D140      		sbci r29,hi8(297)
+ 1349 0602 C65D      		subi r28,lo8(-298)
+ 1350 0604 DE4F      		sbci r29,hi8(-298)
+ 1351 0606 4881      		ld r20,Y
+ 1352 0608 CA52      		subi r28,lo8(298)
+ 1353 060a D140      		sbci r29,hi8(298)
+ 1354 060c C55D      		subi r28,lo8(-299)
+ 1355 060e DE4F      		sbci r29,hi8(-299)
+ 1356 0610 5881      		ld r21,Y
+ 1357 0612 CB52      		subi r28,lo8(299)
+ 1358 0614 D140      		sbci r29,hi8(299)
+ 1359 0616 73FE      		sbrs r7,3
+ 1360 0618 00C0      		rjmp .L119
+ 1361 061a 80EF      		ldi r24,lo8(-16)
+ 1362 061c 00C0      		rjmp .L76
+ 1363               	.L119:
+ 418:stk500boot.c  **** 			send_me=0x00;
+ 1364               		.loc 1 418 0
+ 1365 061e 80E0      		ldi r24,0
+ 1366               	.L76:
+ 1367               	.LVL161:
+ 420:stk500boot.c  **** 			if(data&0b00000100)	send_me|=0x0f;
+ 1368               		.loc 1 420 0
+ 1369 0620 72FC      		sbrc r7,2
+ 1370 0622 8F60      		ori r24,lo8(15)
+ 1371               	.LVL162:
+ 1372               	.L77:
+ 421:stk500boot.c  **** 			send_char(send_me);
+ 1373               		.loc 1 421 0
+ 1374 0624 C85D      		subi r28,lo8(-296)
+ 1375 0626 DE4F      		sbci r29,hi8(-296)
+ 1376 0628 2883      		st Y,r18
+ 1377 062a C852      		subi r28,lo8(296)
+ 1378 062c D140      		sbci r29,hi8(296)
+ 1379 062e C75D      		subi r28,lo8(-297)
+ 1380 0630 DE4F      		sbci r29,hi8(-297)
+ 1381 0632 3883      		st Y,r19
+ 1382 0634 C952      		subi r28,lo8(297)
+ 1383 0636 D140      		sbci r29,hi8(297)
+ 1384 0638 C65D      		subi r28,lo8(-298)
+ 1385 063a DE4F      		sbci r29,hi8(-298)
+ 1386 063c 4883      		st Y,r20
+ 1387 063e CA52      		subi r28,lo8(298)
+ 1388 0640 D140      		sbci r29,hi8(298)
+ 1389 0642 C55D      		subi r28,lo8(-299)
+ 1390 0644 DE4F      		sbci r29,hi8(-299)
+ 1391 0646 5883      		st Y,r21
+ 1392 0648 CB52      		subi r28,lo8(299)
+ 1393 064a D140      		sbci r29,hi8(299)
+ 1394 064c 0E94 0000 		call send_char
+ 1395               	.LVL163:
+ 404:stk500boot.c  **** 		for(zeile=0;zeile<6;zeile++){
+ 1396               		.loc 1 404 0
+ 1397 0650 C85D      		subi r28,lo8(-296)
+ 1398 0652 DE4F      		sbci r29,hi8(-296)
+ 1399 0654 2881      		ld r18,Y
+ 1400 0656 C852      		subi r28,lo8(296)
+ 1401 0658 D140      		sbci r29,hi8(296)
+ 1402 065a C75D      		subi r28,lo8(-297)
+ 1403 065c DE4F      		sbci r29,hi8(-297)
+ 1404 065e 3881      		ld r19,Y
+ 1405 0660 C952      		subi r28,lo8(297)
+ 1406 0662 D140      		sbci r29,hi8(297)
+ 1407 0664 C65D      		subi r28,lo8(-298)
+ 1408 0666 DE4F      		sbci r29,hi8(-298)
+ 1409 0668 4881      		ld r20,Y
+ 1410 066a CA52      		subi r28,lo8(298)
+ 1411 066c D140      		sbci r29,hi8(298)
+ 1412 066e C55D      		subi r28,lo8(-299)
+ 1413 0670 DE4F      		sbci r29,hi8(-299)
+ 1414 0672 5881      		ld r21,Y
+ 1415 0674 CB52      		subi r28,lo8(299)
+ 1416 0676 D140      		sbci r29,hi8(299)
+ 1417 0678 CD10      		cpse r12,r13
+ 1418 067a 00C0      		rjmp .L78
+ 424:stk500boot.c  **** 		x+=3;
+ 1419               		.loc 1 424 0
+ 1420 067c 0D5F      		subi r16,lo8(-(3))
+ 1421               	.LVL164:
+ 379:stk500boot.c  **** 	for(a=0;a<9;a++){
+ 1422               		.loc 1 379 0
+ 1423 067e 8F2D      		mov r24,r15
+ 1424 0680 8F5F      		subi r24,lo8(-(1))
+ 1425               	.LVL165:
+ 1426 0682 0A32      		cpi r16,lo8(42)
+ 1427 0684 01F0      		breq .+2
+ 1428 0686 00C0      		rjmp .L79
+ 714:stk500boot.c  **** 
+ 715:stk500boot.c  **** 						show_logo();
+ 716:stk500boot.c  **** 
+ 717:stk500boot.c  **** 						answerByte = (SIGNATURE_BYTES >>16) & 0x000000FF;
+ 1429               		.loc 1 717 0
+ 1430 0688 8EE1      		ldi r24,lo8(30)
+ 1431               	.LVL166:
+ 1432 068a 00C0      		rjmp .L68
+ 1433               	.LVL167:
+ 1434               	.L69:
+ 1435               	.LBE85:
+ 1436               	.LBE84:
+ 718:stk500boot.c  **** 					} else if ( signatureIndex == 1 ) {
+ 1437               		.loc 1 718 0
+ 1438 068c 8130      		cpi r24,lo8(1)
+ 1439 068e 01F4      		brne .L120
+ 719:stk500boot.c  **** 						answerByte = (SIGNATURE_BYTES >> 8) & 0x000000FF;
+ 1440               		.loc 1 719 0
+ 1441 0690 88E9      		ldi r24,lo8(-104)
+ 1442               	.LVL168:
+ 1443 0692 00C0      		rjmp .L68
+ 1444               	.LVL169:
+ 1445               	.L110:
+ 1446               	.LBE83:
+ 720:stk500boot.c  **** 					} else {
+ 721:stk500boot.c  **** 						answerByte = SIGNATURE_BYTES & 0x000000FF;
+ 722:stk500boot.c  **** 					};
+ 723:stk500boot.c  **** 				}
+ 724:stk500boot.c  **** 				else if ( msgBuffer[4] & 0x50 )
+ 725:stk500boot.c  **** 				{
+ 726:stk500boot.c  **** 					answerByte = 0; //read fuse/lock bits not implemented, return dummy value
+ 1447               		.loc 1 726 0
+ 1448 0694 80E0      		ldi r24,0
+ 1449 0696 00C0      		rjmp .L68
+ 1450               	.LVL170:
+ 1451               	.L120:
+ 1452               	.LBB86:
+ 721:stk500boot.c  **** 						answerByte = SIGNATURE_BYTES & 0x000000FF;
+ 1453               		.loc 1 721 0
+ 1454 0698 81E0      		ldi r24,lo8(1)
+ 1455               	.LVL171:
+ 1456               	.L68:
+ 1457               	.LBE86:
+ 727:stk500boot.c  **** 				}
+ 728:stk500boot.c  **** 				else
+ 729:stk500boot.c  **** 				{
+ 730:stk500boot.c  **** 					answerByte = 0; // for all others command are not implemented, return dummy value for AVRDUDE 
+ 731:stk500boot.c  **** 					// flag = 1; // Remark this line for AVRDUDE <Worapoht>
+ 732:stk500boot.c  **** 				}
+ 733:stk500boot.c  **** 				if ( !flag )
+ 734:stk500boot.c  **** 				{
+ 735:stk500boot.c  **** 					msgLength = 7;
+ 736:stk500boot.c  **** 					msgBuffer[1] = STATUS_CMD_OK;
+ 1458               		.loc 1 736 0
+ 1459 069a 1A82      		std Y+2,__zero_reg__
+ 737:stk500boot.c  **** 					msgBuffer[2] = 0;
+ 1460               		.loc 1 737 0
+ 1461 069c 1B82      		std Y+3,__zero_reg__
+ 738:stk500boot.c  **** 					msgBuffer[3] = msgBuffer[4];
+ 1462               		.loc 1 738 0
+ 1463 069e EC82      		std Y+4,r14
+ 739:stk500boot.c  **** 					msgBuffer[4] = 0;
+ 1464               		.loc 1 739 0
+ 1465 06a0 1D82      		std Y+5,__zero_reg__
+ 740:stk500boot.c  **** 					msgBuffer[5] = answerByte;
+ 1466               		.loc 1 740 0
+ 1467 06a2 8E83      		std Y+6,r24
+ 741:stk500boot.c  **** 					msgBuffer[6] = STATUS_CMD_OK;
+ 1468               		.loc 1 741 0
+ 1469 06a4 1F82      		std Y+7,__zero_reg__
+ 1470 06a6 00E0      		ldi r16,0
+ 735:stk500boot.c  **** 					msgLength = 7;
+ 1471               		.loc 1 735 0
+ 1472 06a8 67E0      		ldi r22,lo8(7)
+ 1473 06aa 70E0      		ldi r23,0
+ 1474 06ac 00C0      		rjmp .L80
+ 1475               	.LVL172:
+ 1476               	.L50:
+ 1477               	.LBE82:
+ 742:stk500boot.c  **** 				}
+ 743:stk500boot.c  **** 				// darf nicht in dem init kommen, sonst malen wir das jedes mal - bei jedem Startup, auch wenn 
+ 744:stk500boot.c  **** 
+ 745:stk500boot.c  **** 			}
+ 746:stk500boot.c  **** 			break;
+ 747:stk500boot.c  **** 
+ 748:stk500boot.c  **** 			case CMD_SIGN_ON:
+ 749:stk500boot.c  **** 				msgLength		=	11;
+ 750:stk500boot.c  **** 				msgBuffer[1] 	=	STATUS_CMD_OK;
+ 1478               		.loc 1 750 0
+ 1479 06ae 1A82      		std Y+2,__zero_reg__
+ 751:stk500boot.c  **** 				msgBuffer[2] 	=	8;
+ 1480               		.loc 1 751 0
+ 1481 06b0 88E0      		ldi r24,lo8(8)
+ 1482 06b2 8B83      		std Y+3,r24
+ 752:stk500boot.c  **** 				msgBuffer[3] 	=	'A';
+ 1483               		.loc 1 752 0
+ 1484 06b4 81E4      		ldi r24,lo8(65)
+ 1485 06b6 8C83      		std Y+4,r24
+ 753:stk500boot.c  **** 				msgBuffer[4] 	=	'V';
+ 1486               		.loc 1 753 0
+ 1487 06b8 86E5      		ldi r24,lo8(86)
+ 1488 06ba 8D83      		std Y+5,r24
+ 754:stk500boot.c  **** 				msgBuffer[5] 	=	'R';
+ 1489               		.loc 1 754 0
+ 1490 06bc 82E5      		ldi r24,lo8(82)
+ 1491 06be 8E83      		std Y+6,r24
+ 755:stk500boot.c  **** 				msgBuffer[6] 	=	'I';
+ 1492               		.loc 1 755 0
+ 1493 06c0 89E4      		ldi r24,lo8(73)
+ 1494 06c2 8F83      		std Y+7,r24
+ 756:stk500boot.c  **** 				msgBuffer[7] 	=	'S';
+ 1495               		.loc 1 756 0
+ 1496 06c4 83E5      		ldi r24,lo8(83)
+ 1497 06c6 8887      		std Y+8,r24
+ 757:stk500boot.c  **** 				msgBuffer[8] 	=	'P';
+ 1498               		.loc 1 757 0
+ 1499 06c8 80E5      		ldi r24,lo8(80)
+ 1500 06ca 8987      		std Y+9,r24
+ 758:stk500boot.c  **** 				msgBuffer[9] 	=	'_';
+ 1501               		.loc 1 758 0
+ 1502 06cc 8FE5      		ldi r24,lo8(95)
+ 1503 06ce 8A87      		std Y+10,r24
+ 759:stk500boot.c  **** 				msgBuffer[10]	=	'2';
+ 1504               		.loc 1 759 0
+ 1505 06d0 82E3      		ldi r24,lo8(50)
+ 1506 06d2 8B87      		std Y+11,r24
+ 760:stk500boot.c  **** 				break;
+ 1507               		.loc 1 760 0
+ 1508 06d4 00E0      		ldi r16,0
+ 749:stk500boot.c  **** 				msgLength		=	11;
+ 1509               		.loc 1 749 0
+ 1510 06d6 6BE0      		ldi r22,lo8(11)
+ 1511 06d8 70E0      		ldi r23,0
+ 1512               		.loc 1 760 0
+ 1513 06da 00C0      		rjmp .L80
+ 1514               	.LVL173:
+ 1515               	.L52:
+ 1516 06dc EA81      		ldd r30,Y+2
+ 1517 06de E059      		subi r30,lo8(-(112))
+ 1518 06e0 E330      		cpi r30,lo8(3)
+ 1519 06e2 00F4      		brsh .L121
+ 1520 06e4 F0E0      		ldi r31,0
+ 1521 06e6 E050      		subi r30,lo8(-(CSWTCH.21))
+ 1522 06e8 F040      		sbci r31,hi8(-(CSWTCH.21))
+ 1523 06ea 8081      		ld r24,Z
+ 1524 06ec 00C0      		rjmp .L81
+ 1525               	.L121:
+ 1526               	.LBB87:
+ 761:stk500boot.c  **** 
+ 762:stk500boot.c  **** 			case CMD_GET_PARAMETER:
+ 763:stk500boot.c  **** 			{
+ 764:stk500boot.c  **** 				unsigned char value;
+ 765:stk500boot.c  **** 
+ 766:stk500boot.c  **** 				switch(msgBuffer[1])
+ 1527               		.loc 1 766 0
+ 1528 06ee 80E0      		ldi r24,0
+ 1529               	.L81:
+ 1530               	.LVL174:
+ 767:stk500boot.c  **** 				{
+ 768:stk500boot.c  **** 				case PARAM_BUILD_NUMBER_LOW:
+ 769:stk500boot.c  **** 					value	=	CONFIG_PARAM_BUILD_NUMBER_LOW;
+ 770:stk500boot.c  **** 					break;
+ 771:stk500boot.c  **** 				case PARAM_BUILD_NUMBER_HIGH:
+ 772:stk500boot.c  **** 					value	=	CONFIG_PARAM_BUILD_NUMBER_HIGH;
+ 773:stk500boot.c  **** 					break;
+ 774:stk500boot.c  **** 				case PARAM_HW_VER:
+ 775:stk500boot.c  **** 					value	=	CONFIG_PARAM_HW_VER;
+ 776:stk500boot.c  **** 					break;
+ 777:stk500boot.c  **** 				case PARAM_SW_MAJOR:
+ 778:stk500boot.c  **** 					value	=	CONFIG_PARAM_SW_MAJOR;
+ 779:stk500boot.c  **** 					break;
+ 780:stk500boot.c  **** 				case PARAM_SW_MINOR:
+ 781:stk500boot.c  **** 					value	=	CONFIG_PARAM_SW_MINOR;
+ 782:stk500boot.c  **** 					break;
+ 783:stk500boot.c  **** 				default:
+ 784:stk500boot.c  **** 					value	=	0;
+ 785:stk500boot.c  **** 					break;
+ 786:stk500boot.c  **** 				}
+ 787:stk500boot.c  **** 				msgLength		=	3;
+ 788:stk500boot.c  **** 				msgBuffer[1]	=	STATUS_CMD_OK;
+ 1531               		.loc 1 788 0
+ 1532 06f0 1A82      		std Y+2,__zero_reg__
+ 789:stk500boot.c  **** 				msgBuffer[2]	=	value;
+ 1533               		.loc 1 789 0
+ 1534 06f2 8B83      		std Y+3,r24
+ 1535 06f4 00C0      		rjmp .L179
+ 1536               	.LVL175:
+ 1537               	.L54:
+ 1538               	.LBE87:
+ 790:stk500boot.c  **** 			}
+ 791:stk500boot.c  **** 			break;
+ 792:stk500boot.c  **** 
+ 793:stk500boot.c  **** 			case CMD_LEAVE_PROGMODE_ISP:
+ 794:stk500boot.c  **** 				isLeave			=	1;
+ 795:stk500boot.c  **** 				msgLength		=	2;
+ 796:stk500boot.c  **** 				msgBuffer[1]	=	STATUS_CMD_OK;
+ 1539               		.loc 1 796 0
+ 1540 06f6 1A82      		std Y+2,__zero_reg__
+ 794:stk500boot.c  **** 				isLeave			=	1;
+ 1541               		.loc 1 794 0
+ 1542 06f8 01E0      		ldi r16,lo8(1)
+ 1543 06fa 00C0      		rjmp .L180
+ 1544               	.LVL176:
+ 1545               	.L61:
+ 1546               	.LBB88:
+ 797:stk500boot.c  **** 				//*	fall thru
+ 798:stk500boot.c  **** 				break;
+ 799:stk500boot.c  **** 			case CMD_SET_PARAMETER: // same as enter progmode
+ 800:stk500boot.c  **** 			case CMD_ENTER_PROGMODE_ISP:
+ 801:stk500boot.c  **** 				msgLength		=	2;
+ 802:stk500boot.c  **** 				msgBuffer[1]	=	STATUS_CMD_OK;
+ 803:stk500boot.c  **** 				break;
+ 804:stk500boot.c  **** 
+ 805:stk500boot.c  **** 			case CMD_READ_SIGNATURE_ISP:
+ 806:stk500boot.c  **** 			{
+ 807:stk500boot.c  **** 				unsigned char signatureIndex	=	msgBuffer[4];
+ 1547               		.loc 1 807 0
+ 1548 06fc 8D81      		ldd r24,Y+5
+ 1549               	.LVL177:
+ 808:stk500boot.c  **** 				unsigned char signature;
+ 809:stk500boot.c  **** 
+ 810:stk500boot.c  **** 				if ( signatureIndex == 0 )
+ 1550               		.loc 1 810 0
+ 1551 06fe 8823      		tst r24
+ 1552 0700 01F0      		breq .L122
+ 811:stk500boot.c  **** 					signature	=	(SIGNATURE_BYTES >>16) & 0x000000FF;
+ 812:stk500boot.c  **** 				else if ( signatureIndex == 1 )
+ 1553               		.loc 1 812 0
+ 1554 0702 8130      		cpi r24,lo8(1)
+ 1555 0704 01F4      		brne .L123
+ 813:stk500boot.c  **** 					signature	=	(SIGNATURE_BYTES >> 8) & 0x000000FF;
+ 1556               		.loc 1 813 0
+ 1557 0706 88E9      		ldi r24,lo8(-104)
+ 1558               	.LVL178:
+ 1559 0708 00C0      		rjmp .L82
+ 1560               	.LVL179:
+ 1561               	.L122:
+ 811:stk500boot.c  **** 					signature	=	(SIGNATURE_BYTES >>16) & 0x000000FF;
+ 1562               		.loc 1 811 0
+ 1563 070a 8EE1      		ldi r24,lo8(30)
+ 1564               	.LVL180:
+ 1565 070c 00C0      		rjmp .L82
+ 1566               	.LVL181:
+ 1567               	.L123:
+ 814:stk500boot.c  **** 				else
+ 815:stk500boot.c  **** 					signature	=	SIGNATURE_BYTES & 0x000000FF;
+ 1568               		.loc 1 815 0
+ 1569 070e 81E0      		ldi r24,lo8(1)
+ 1570               	.LVL182:
+ 1571               	.L82:
+ 816:stk500boot.c  **** 
+ 817:stk500boot.c  **** 				msgLength		=	4;
+ 818:stk500boot.c  **** 				msgBuffer[1]	=	STATUS_CMD_OK;
+ 1572               		.loc 1 818 0
+ 1573 0710 1A82      		std Y+2,__zero_reg__
+ 819:stk500boot.c  **** 				msgBuffer[2]	=	signature;
+ 1574               		.loc 1 819 0
+ 1575 0712 8B83      		std Y+3,r24
+ 1576 0714 00C0      		rjmp .L182
+ 1577               	.LVL183:
+ 1578               	.L60:
+ 1579               	.LBE88:
+ 820:stk500boot.c  **** 				msgBuffer[3]	=	STATUS_CMD_OK;
+ 821:stk500boot.c  **** 
+ 822:stk500boot.c  **** 
+ 823:stk500boot.c  **** 			}
+ 824:stk500boot.c  **** 			break;
+ 825:stk500boot.c  **** 
+ 826:stk500boot.c  **** 			case CMD_READ_LOCK_ISP:
+ 827:stk500boot.c  **** 				msgLength		=	4;
+ 828:stk500boot.c  **** 				msgBuffer[1]	=	STATUS_CMD_OK;
+ 1580               		.loc 1 828 0
+ 1581 0716 1A82      		std Y+2,__zero_reg__
+ 1582               	.LBB89:
+ 829:stk500boot.c  **** 				msgBuffer[2]	=	boot_lock_fuse_bits_get( GET_LOCK_BITS );
+ 1583               		.loc 1 829 0
+ 1584 0718 E1E0      		ldi r30,lo8(1)
+ 1585 071a F0E0      		ldi r31,0
+ 1586 071c 89E0      		ldi r24,lo8(9)
+ 1587               	/* #APP */
+ 1588               	 ;  829 "stk500boot.c" 1
+ 1589 071e 8093 5700 		sts 87, r24
+ 1590 0722 E491      		lpm r30, Z
+ 1591               		
+ 1592               	 ;  0 "" 2
+ 1593               	/* #NOAPP */
+ 1594               	.L183:
+ 1595               	.LVL184:
+ 1596               	.LBE89:
+ 1597 0724 EB83      		std Y+3,r30
+ 1598               	.LVL185:
+ 1599               	.L182:
+ 830:stk500boot.c  **** 				msgBuffer[3]	=	STATUS_CMD_OK;
+ 1600               		.loc 1 830 0
+ 1601 0726 1C82      		std Y+4,__zero_reg__
+ 831:stk500boot.c  **** 				break;
+ 1602               		.loc 1 831 0
+ 1603 0728 00E0      		ldi r16,0
+ 827:stk500boot.c  **** 				msgLength		=	4;
+ 1604               		.loc 1 827 0
+ 1605 072a 64E0      		ldi r22,lo8(4)
+ 1606 072c 70E0      		ldi r23,0
+ 1607               		.loc 1 831 0
+ 1608 072e 00C0      		rjmp .L80
+ 1609               	.LVL186:
+ 1610               	.L58:
+ 1611               	.LBB90:
+ 832:stk500boot.c  **** 
+ 833:stk500boot.c  **** 			case CMD_READ_FUSE_ISP:
+ 834:stk500boot.c  **** 			{
+ 835:stk500boot.c  **** 				unsigned char fuseBits;
+ 836:stk500boot.c  **** 
+ 837:stk500boot.c  **** 				if ( msgBuffer[2] == 0x50 )
+ 1612               		.loc 1 837 0
+ 1613 0730 8B81      		ldd r24,Y+3
+ 1614 0732 8035      		cpi r24,lo8(80)
+ 1615 0734 01F4      		brne .L83
+ 838:stk500boot.c  **** 				{
+ 839:stk500boot.c  **** 					if ( msgBuffer[3] == 0x08 )
+ 1616               		.loc 1 839 0
+ 1617 0736 8C81      		ldd r24,Y+4
+ 1618 0738 8830      		cpi r24,lo8(8)
+ 1619 073a 01F4      		brne .L84
+ 1620               	.LBB91:
+ 840:stk500boot.c  **** 						fuseBits	=	boot_lock_fuse_bits_get( GET_EXTENDED_FUSE_BITS );
+ 1621               		.loc 1 840 0
+ 1622 073c E2E0      		ldi r30,lo8(2)
+ 1623 073e F0E0      		ldi r31,0
+ 1624 0740 00C0      		rjmp .L178
+ 1625               	.L84:
+ 1626               	.LBE91:
+ 1627               	.LBB92:
+ 841:stk500boot.c  **** 					else
+ 842:stk500boot.c  **** 						fuseBits	=	boot_lock_fuse_bits_get( GET_LOW_FUSE_BITS );
+ 1628               		.loc 1 842 0
+ 1629 0742 E0E0      		ldi r30,0
+ 1630 0744 F0E0      		ldi r31,0
+ 1631 0746 00C0      		rjmp .L178
+ 1632               	.L83:
+ 1633               	.LBE92:
+ 1634               	.LBB93:
+ 843:stk500boot.c  **** 				}
+ 844:stk500boot.c  **** 				else
+ 845:stk500boot.c  **** 				{
+ 846:stk500boot.c  **** 					fuseBits	=	boot_lock_fuse_bits_get( GET_HIGH_FUSE_BITS );
+ 1635               		.loc 1 846 0
+ 1636 0748 E3E0      		ldi r30,lo8(3)
+ 1637 074a F0E0      		ldi r31,0
+ 1638               	.L178:
+ 1639 074c 89E0      		ldi r24,lo8(9)
+ 1640               	/* #APP */
+ 1641               	 ;  846 "stk500boot.c" 1
+ 1642 074e 8093 5700 		sts 87, r24
+ 1643 0752 E491      		lpm r30, Z
+ 1644               		
+ 1645               	 ;  0 "" 2
+ 1646               	.LVL187:
+ 1647               	/* #NOAPP */
+ 1648               	.LBE93:
+ 847:stk500boot.c  **** 				}
+ 848:stk500boot.c  **** 				msgLength		=	4;
+ 849:stk500boot.c  **** 				msgBuffer[1]	=	STATUS_CMD_OK;
+ 1649               		.loc 1 849 0
+ 1650 0754 1A82      		std Y+2,__zero_reg__
+ 1651 0756 00C0      		rjmp .L183
+ 1652               	.LVL188:
+ 1653               	.L59:
+ 1654               	.LBE90:
+ 1655               	.LBB95:
+ 850:stk500boot.c  **** 				msgBuffer[2]	=	fuseBits;
+ 851:stk500boot.c  **** 				msgBuffer[3]	=	STATUS_CMD_OK;
+ 852:stk500boot.c  **** 			}
+ 853:stk500boot.c  **** 			break;
+ 854:stk500boot.c  **** 
+ 855:stk500boot.c  **** #ifndef REMOVE_PROGRAM_LOCK_BIT_SUPPORT
+ 856:stk500boot.c  **** 			case CMD_PROGRAM_LOCK_ISP:
+ 857:stk500boot.c  **** 			{
+ 858:stk500boot.c  **** 				unsigned char lockBits	=	msgBuffer[4];
+ 859:stk500boot.c  **** 
+ 860:stk500boot.c  **** 				lockBits	=	(~lockBits) & 0x3C;	// mask BLBxx bits
+ 1656               		.loc 1 860 0
+ 1657 0758 8D81      		ldd r24,Y+5
+ 1658               	.LVL189:
+ 1659               	.LBB96:
+ 861:stk500boot.c  **** 				boot_lock_bits_set(lockBits);		// and program it
+ 1660               		.loc 1 861 0
+ 1661 075a 836C      		ori r24,lo8(-61)
+ 1662               	.LVL190:
+ 1663 075c 99E0      		ldi r25,lo8(9)
+ 1664               	.LVL191:
+ 1665               	/* #APP */
+ 1666               	 ;  861 "stk500boot.c" 1
+ 1667 075e E1E0      		ldi r30, 1
+ 1668 0760 F0E0      		ldi r31, 0
+ 1669 0762 082E      		mov r0, r24
+ 1670 0764 9093 5700 		sts 87, r25
+ 1671 0768 E895      		spm
+ 1672               		
+ 1673               	 ;  0 "" 2
+ 1674               	/* #NOAPP */
+ 1675               	.L86:
+ 1676               	.LBE96:
+ 862:stk500boot.c  **** 				boot_spm_busy_wait();
+ 1677               		.loc 1 862 0 discriminator 1
+ 1678 076a 07B6      		in __tmp_reg__,0x37
+ 1679 076c 00FC      		sbrc __tmp_reg__,0
+ 1680 076e 00C0      		rjmp .L86
+ 1681               	.LVL192:
+ 863:stk500boot.c  **** 
+ 864:stk500boot.c  **** 				msgLength		=	3;
+ 865:stk500boot.c  **** 				msgBuffer[1]	=	STATUS_CMD_OK;
+ 1682               		.loc 1 865 0
+ 1683 0770 1A82      		std Y+2,__zero_reg__
+ 866:stk500boot.c  **** 				msgBuffer[2]	=	STATUS_CMD_OK;
+ 1684               		.loc 1 866 0
+ 1685 0772 1B82      		std Y+3,__zero_reg__
+ 1686               	.LVL193:
+ 1687               	.L179:
+ 1688               	.LBE95:
+ 867:stk500boot.c  **** 			}
+ 868:stk500boot.c  **** 			break;
+ 1689               		.loc 1 868 0
+ 1690 0774 00E0      		ldi r16,0
+ 864:stk500boot.c  **** 				msgLength		=	3;
+ 1691               		.loc 1 864 0
+ 1692 0776 63E0      		ldi r22,lo8(3)
+ 1693 0778 70E0      		ldi r23,0
+ 1694               		.loc 1 868 0
+ 1695 077a 00C0      		rjmp .L80
+ 1696               	.LVL194:
+ 1697               	.L55:
+ 869:stk500boot.c  **** #endif
+ 870:stk500boot.c  **** 			case CMD_CHIP_ERASE_ISP:
+ 871:stk500boot.c  **** 				eraseAddress	=	0;
+ 872:stk500boot.c  **** 				msgLength		=	2;
+ 873:stk500boot.c  **** 				msgBuffer[1]	=	STATUS_CMD_OK;
+ 1698               		.loc 1 873 0
+ 1699 077c 1A82      		std Y+2,__zero_reg__
+ 874:stk500boot.c  **** 				break;
+ 1700               		.loc 1 874 0
+ 1701 077e 00E0      		ldi r16,0
+ 872:stk500boot.c  **** 				msgLength		=	2;
+ 1702               		.loc 1 872 0
+ 1703 0780 62E0      		ldi r22,lo8(2)
+ 1704 0782 70E0      		ldi r23,0
+ 871:stk500boot.c  **** 				eraseAddress	=	0;
+ 1705               		.loc 1 871 0
+ 1706 0784 812C      		mov r8,__zero_reg__
+ 1707 0786 912C      		mov r9,__zero_reg__
+ 1708 0788 5401      		movw r10,r8
+ 1709               		.loc 1 874 0
+ 1710 078a 00C0      		rjmp .L80
+ 1711               	.LVL195:
+ 1712               	.L53:
+ 875:stk500boot.c  **** 
+ 876:stk500boot.c  **** 			case CMD_LOAD_ADDRESS:
+ 877:stk500boot.c  **** #if defined(RAMPZ)
+ 878:stk500boot.c  **** 				address	=	( ((address_t)(msgBuffer[1])<<24)|((address_t)(msgBuffer[2])<<16)|((address_t)(msgBuf
+ 1713               		.loc 1 878 0
+ 1714 078c 8A81      		ldd r24,Y+2
+ 1715 078e 2B81      		ldd r18,Y+3
+ 1716 0790 422F      		mov r20,r18
+ 1717 0792 50E0      		ldi r21,0
+ 1718 0794 60E0      		ldi r22,0
+ 1719 0796 70E0      		ldi r23,0
+ 1720 0798 3327      		clr r19
+ 1721 079a 2227      		clr r18
+ 1722 079c 582B      		or r21,r24
+ 1723 079e 8D81      		ldd r24,Y+5
+ 1724 07a0 282B      		or r18,r24
+ 1725 07a2 8C81      		ldd r24,Y+4
+ 1726 07a4 382B      		or r19,r24
+ 1727 07a6 220F      		lsl r18
+ 1728 07a8 331F      		rol r19
+ 1729 07aa 441F      		rol r20
+ 1730 07ac 551F      		rol r21
+ 1731               	.L184:
+ 1732               	.LVL196:
+ 879:stk500boot.c  **** #else
+ 880:stk500boot.c  **** 				address	=	( ((msgBuffer[3])<<8)|(msgBuffer[4]) )<<1;		//convert word to byte address
+ 881:stk500boot.c  **** #endif
+ 882:stk500boot.c  **** 				msgLength		=	2;
+ 883:stk500boot.c  **** 				msgBuffer[1]	=	STATUS_CMD_OK;
+ 1733               		.loc 1 883 0
+ 1734 07ae 1A82      		std Y+2,__zero_reg__
+ 1735 07b0 00C0      		rjmp .L181
+ 1736               	.LVL197:
+ 1737               	.L56:
+ 1738               	.LBB97:
+ 884:stk500boot.c  **** 				break;
+ 885:stk500boot.c  **** 
+ 886:stk500boot.c  **** 			case CMD_PROGRAM_FLASH_ISP:
+ 887:stk500boot.c  **** 			case CMD_PROGRAM_EEPROM_ISP:
+ 888:stk500boot.c  **** 			{
+ 889:stk500boot.c  **** 				unsigned int	size	=	((msgBuffer[1])<<8) | msgBuffer[2]; // 80
+ 1739               		.loc 1 889 0
+ 1740 07b2 FA81      		ldd r31,Y+2
+ 1741 07b4 C15E      		subi r28,lo8(-287)
+ 1742 07b6 DE4F      		sbci r29,hi8(-287)
+ 1743 07b8 F883      		st Y,r31
+ 1744 07ba CF51      		subi r28,lo8(287)
+ 1745 07bc D140      		sbci r29,hi8(287)
+ 1746 07be C25E      		subi r28,lo8(-286)
+ 1747 07c0 DE4F      		sbci r29,hi8(-286)
+ 1748 07c2 1882      		st Y,__zero_reg__
+ 1749 07c4 CE51      		subi r28,lo8(286)
+ 1750 07c6 D140      		sbci r29,hi8(286)
+ 1751 07c8 8B81      		ldd r24,Y+3
+ 1752 07ca C25E      		subi r28,lo8(-286)
+ 1753 07cc DE4F      		sbci r29,hi8(-286)
+ 1754 07ce 6881      		ld r22,Y
+ 1755 07d0 7981      		ldd r23,Y+1
+ 1756 07d2 CE51      		subi r28,lo8(286)
+ 1757 07d4 D140      		sbci r29,hi8(286)
+ 1758 07d6 682B      		or r22,r24
+ 1759 07d8 CB01      		movw r24,r22
+ 1760               	.LVL198:
+ 890:stk500boot.c  **** 				unsigned char	*p	=	msgBuffer+10;
+ 891:stk500boot.c  **** 				unsigned int	data;
+ 892:stk500boot.c  **** 				unsigned char	highByte, lowByte;
+ 893:stk500boot.c  **** 				address_t		tempaddress	=	address;
+ 894:stk500boot.c  **** 
+ 895:stk500boot.c  **** 
+ 896:stk500boot.c  **** 				if ( msgBuffer[0] == CMD_PROGRAM_FLASH_ISP )
+ 1761               		.loc 1 896 0
+ 1762 07da E331      		cpi r30,lo8(19)
+ 1763 07dc 01F0      		breq .+2
+ 1764 07de 00C0      		rjmp .L124
+ 897:stk500boot.c  **** 				{
+ 898:stk500boot.c  **** 					// erase only main section (bootloader protection)
+ 899:stk500boot.c  **** 					if (eraseAddress < APP_END )
+ 1765               		.loc 1 899 0
+ 1766 07e0 8114      		cp r8,__zero_reg__
+ 1767 07e2 70EC      		ldi r23,-64
+ 1768 07e4 9706      		cpc r9,r23
+ 1769 07e6 73E0      		ldi r23,3
+ 1770 07e8 A706      		cpc r10,r23
+ 1771 07ea B104      		cpc r11,__zero_reg__
+ 1772 07ec 00F4      		brsh .L88
+ 900:stk500boot.c  **** 					{
+ 901:stk500boot.c  **** 						boot_page_erase(eraseAddress);	// Perform page erase
+ 1773               		.loc 1 901 0
+ 1774 07ee 63E0      		ldi r22,lo8(3)
+ 1775               	.LVL199:
+ 1776               	/* #APP */
+ 1777               	 ;  901 "stk500boot.c" 1
+ 1778 07f0 F401      		movw r30, r8
+ 1779 07f2 A092 5B00 		sts  91, r10
+ 1780 07f6 6093 5700 		sts 87, r22
+ 1781 07fa E895      		spm
+ 1782               		
+ 1783               	 ;  0 "" 2
+ 1784               	/* #NOAPP */
+ 1785               	.L89:
+ 902:stk500boot.c  **** 						boot_spm_busy_wait();		// Wait until the memory is erased.
+ 1786               		.loc 1 902 0 discriminator 1
+ 1787 07fc 07B6      		in __tmp_reg__,0x37
+ 1788 07fe 00FC      		sbrc __tmp_reg__,0
+ 1789 0800 00C0      		rjmp .L89
+ 903:stk500boot.c  **** 						eraseAddress += SPM_PAGESIZE;	// point to next page to be erase
+ 1790               		.loc 1 903 0
+ 1791 0802 AFEF      		ldi r26,-1
+ 1792 0804 9A1A      		sub r9,r26
+ 1793 0806 AA0A      		sbc r10,r26
+ 1794 0808 BA0A      		sbc r11,r26
+ 1795               	.LVL200:
+ 1796               	.L88:
+ 1797 080a 6B85      		ldd r22,Y+11
+ 1798 080c DE01      		movw r26,r28
+ 1799 080e 1D96      		adiw r26,13
+ 1800               	.LBE97:
+ 1801               	.LBB98:
+ 1802               	.LBB94:
+ 840:stk500boot.c  **** 						fuseBits	=	boot_lock_fuse_bits_get( GET_EXTENDED_FUSE_BITS );
+ 1803               		.loc 1 840 0 discriminator 1
+ 1804 0810 6901      		movw r12,r18
+ 1805 0812 7A01      		movw r14,r20
+ 1806               	.LBE94:
+ 1807               	.LBE98:
+ 1808               	.LBB99:
+ 904:stk500boot.c  **** 					}
+ 905:stk500boot.c  **** 
+ 906:stk500boot.c  **** 					/* Write FLASH */
+ 907:stk500boot.c  **** 					do {
+ 908:stk500boot.c  **** 						lowByte		=	*p++;
+ 909:stk500boot.c  **** 						highByte 	=	*p++;
+ 910:stk500boot.c  **** 
+ 911:stk500boot.c  **** 						data		=	(highByte << 8) | lowByte;
+ 912:stk500boot.c  **** 						boot_page_fill(address,data);
+ 1809               		.loc 1 912 0 discriminator 1
+ 1810 0814 01E0      		ldi r16,lo8(1)
+ 1811               	.L91:
+ 1812               	.LVL201:
+ 467:stk500boot.c  **** int main(void)
+ 1813               		.loc 1 467 0 discriminator 1
+ 1814 0816 FD01      		movw r30,r26
+ 1815 0818 3197      		sbiw r30,1
+ 1816               	.LVL202:
+ 911:stk500boot.c  **** 						data		=	(highByte << 8) | lowByte;
+ 1817               		.loc 1 911 0 discriminator 1
+ 1818 081a 7081      		ld r23,Z
+ 1819 081c CF5D      		subi r28,lo8(-289)
+ 1820 081e DE4F      		sbci r29,hi8(-289)
+ 1821 0820 7883      		st Y,r23
+ 1822 0822 C152      		subi r28,lo8(289)
+ 1823 0824 D140      		sbci r29,hi8(289)
+ 1824 0826 C05E      		subi r28,lo8(-288)
+ 1825 0828 DE4F      		sbci r29,hi8(-288)
+ 1826 082a 1882      		st Y,__zero_reg__
+ 1827 082c C052      		subi r28,lo8(288)
+ 1828 082e D140      		sbci r29,hi8(288)
+ 1829 0830 C05E      		subi r28,lo8(-288)
+ 1830 0832 DE4F      		sbci r29,hi8(-288)
+ 1831 0834 E881      		ld r30,Y
+ 1832 0836 F981      		ldd r31,Y+1
+ 1833 0838 C052      		subi r28,lo8(288)
+ 1834 083a D140      		sbci r29,hi8(288)
+ 1835               	.LVL203:
+ 1836 083c E62B      		or r30,r22
+ 1837 083e BF01      		movw r22,r30
+ 1838               	.LVL204:
+ 1839               		.loc 1 912 0 discriminator 1
+ 1840               	/* #APP */
+ 1841               	 ;  912 "stk500boot.c" 1
+ 1842 0840 0B01      		movw  r0, r22
+ 1843 0842 F601      		movw r30, r12
+ 1844 0844 E092 5B00 		sts 91, r14
+ 1845 0848 0093 5700 		sts 87, r16
+ 1846 084c E895      		spm
+ 1847 084e 1124      		clr  r1
+ 1848               		
+ 1849               	 ;  0 "" 2
+ 913:stk500boot.c  **** 
+ 914:stk500boot.c  **** 						address	=	address + 2;	// Select next word in memory
+ 1850               		.loc 1 914 0 discriminator 1
+ 1851               	/* #NOAPP */
+ 1852 0850 F2E0      		ldi r31,2
+ 1853 0852 CF0E      		add r12,r31
+ 1854 0854 D11C      		adc r13,__zero_reg__
+ 1855 0856 E11C      		adc r14,__zero_reg__
+ 1856 0858 F11C      		adc r15,__zero_reg__
+ 1857               	.LVL205:
+ 915:stk500boot.c  **** 						size	-=	2;				// Reduce number of bytes to write by two
+ 1858               		.loc 1 915 0 discriminator 1
+ 1859 085a 0297      		sbiw r24,2
+ 1860               	.LVL206:
+ 916:stk500boot.c  **** 					} while (size);					// Loop until all bytes written
+ 1861               		.loc 1 916 0 discriminator 1
+ 1862 085c 01F0      		breq .L90
+ 909:stk500boot.c  **** 						highByte 	=	*p++;
+ 1863               		.loc 1 909 0
+ 1864 085e 6C91      		ld r22,X
+ 1865 0860 1296      		adiw r26,2
+ 1866 0862 00C0      		rjmp .L91
+ 1867               	.L90:
+ 917:stk500boot.c  **** 
+ 918:stk500boot.c  **** 					boot_page_write(tempaddress);
+ 1868               		.loc 1 918 0
+ 1869 0864 85E0      		ldi r24,lo8(5)
+ 1870               	.LVL207:
+ 1871               	/* #APP */
+ 1872               	 ;  918 "stk500boot.c" 1
+ 1873 0866 F901      		movw r30, r18
+ 1874 0868 4093 5B00 		sts 91, r20
+ 1875 086c 8093 5700 		sts 87, r24
+ 1876 0870 E895      		spm
+ 1877               		
+ 1878               	 ;  0 "" 2
+ 919:stk500boot.c  **** 
+ 920:stk500boot.c  **** 					//show progress
+ 921:stk500boot.c  **** 					send_command(0x15);
+ 1879               		.loc 1 921 0
+ 1880               	/* #NOAPP */
+ 1881 0872 85E1      		ldi r24,lo8(21)
+ 1882 0874 C85D      		subi r28,lo8(-296)
+ 1883 0876 DE4F      		sbci r29,hi8(-296)
+ 1884 0878 2883      		st Y,r18
+ 1885 087a C852      		subi r28,lo8(296)
+ 1886 087c D140      		sbci r29,hi8(296)
+ 1887 087e C75D      		subi r28,lo8(-297)
+ 1888 0880 DE4F      		sbci r29,hi8(-297)
+ 1889 0882 3883      		st Y,r19
+ 1890 0884 C952      		subi r28,lo8(297)
+ 1891 0886 D140      		sbci r29,hi8(297)
+ 1892 0888 C65D      		subi r28,lo8(-298)
+ 1893 088a DE4F      		sbci r29,hi8(-298)
+ 1894 088c 4883      		st Y,r20
+ 1895 088e CA52      		subi r28,lo8(298)
+ 1896 0890 D140      		sbci r29,hi8(298)
+ 1897 0892 C55D      		subi r28,lo8(-299)
+ 1898 0894 DE4F      		sbci r29,hi8(-299)
+ 1899 0896 5883      		st Y,r21
+ 1900 0898 CB52      		subi r28,lo8(299)
+ 1901 089a D140      		sbci r29,hi8(299)
+ 1902 089c 0E94 0000 		call send_command
+ 1903               	.LVL208:
+ 922:stk500boot.c  **** 					send_command(124*tempaddress/APP_END/2+1);
+ 1904               		.loc 1 922 0
+ 1905 08a0 ACE7      		ldi r26,lo8(124)
+ 1906 08a2 B0E0      		ldi r27,0
+ 1907 08a4 C85D      		subi r28,lo8(-296)
+ 1908 08a6 DE4F      		sbci r29,hi8(-296)
+ 1909 08a8 2881      		ld r18,Y
+ 1910 08aa C852      		subi r28,lo8(296)
+ 1911 08ac D140      		sbci r29,hi8(296)
+ 1912 08ae C75D      		subi r28,lo8(-297)
+ 1913 08b0 DE4F      		sbci r29,hi8(-297)
+ 1914 08b2 3881      		ld r19,Y
+ 1915 08b4 C952      		subi r28,lo8(297)
+ 1916 08b6 D140      		sbci r29,hi8(297)
+ 1917 08b8 C65D      		subi r28,lo8(-298)
+ 1918 08ba DE4F      		sbci r29,hi8(-298)
+ 1919 08bc 4881      		ld r20,Y
+ 1920 08be CA52      		subi r28,lo8(298)
+ 1921 08c0 D140      		sbci r29,hi8(298)
+ 1922 08c2 C55D      		subi r28,lo8(-299)
+ 1923 08c4 DE4F      		sbci r29,hi8(-299)
+ 1924 08c6 5881      		ld r21,Y
+ 1925 08c8 CB52      		subi r28,lo8(299)
+ 1926 08ca D140      		sbci r29,hi8(299)
+ 1927 08cc 0E94 0000 		call __muluhisi3
+ 1928 08d0 20E0      		ldi r18,0
+ 1929 08d2 30E8      		ldi r19,lo8(-128)
+ 1930 08d4 47E0      		ldi r20,lo8(7)
+ 1931 08d6 50E0      		ldi r21,0
+ 1932 08d8 0E94 0000 		call __udivmodsi4
+ 1933 08dc 022F      		mov r16,r18
+ 1934 08de 0F5F      		subi r16,lo8(-(1))
+ 1935 08e0 802F      		mov r24,r16
+ 1936 08e2 0E94 0000 		call send_command
+ 1937               	.LVL209:
+ 923:stk500boot.c  **** 					send_command(124*tempaddress/APP_END/2+1);
+ 1938               		.loc 1 923 0
+ 1939 08e6 802F      		mov r24,r16
+ 1940 08e8 0E94 0000 		call send_command
+ 1941               	.LVL210:
+ 924:stk500boot.c  **** 					send_command(0x75);
+ 1942               		.loc 1 924 0
+ 1943 08ec 85E7      		ldi r24,lo8(117)
+ 1944 08ee 0E94 0000 		call send_command
+ 1945               	.LVL211:
+ 925:stk500boot.c  **** 					send_command(LOADING_Y+2);
+ 1946               		.loc 1 925 0
+ 1947 08f2 89E3      		ldi r24,lo8(57)
+ 1948 08f4 0E94 0000 		call send_command
+ 1949               	.LVL212:
+ 926:stk500boot.c  **** 					send_command(LOADING_Y+2);
+ 1950               		.loc 1 926 0
+ 1951 08f8 89E3      		ldi r24,lo8(57)
+ 1952 08fa 0E94 0000 		call send_command
+ 1953               	.LVL213:
+ 927:stk500boot.c  **** 					send_char(0xff);
+ 1954               		.loc 1 927 0
+ 1955 08fe 8FEF      		ldi r24,lo8(-1)
+ 1956 0900 0E94 0000 		call send_char
+ 1957               	.LVL214:
+ 1958               	.L92:
+ 928:stk500boot.c  **** 					//show progress
+ 929:stk500boot.c  **** 					boot_spm_busy_wait();
+ 1959               		.loc 1 929 0 discriminator 1
+ 1960 0904 07B6      		in __tmp_reg__,0x37
+ 1961 0906 00FC      		sbrc __tmp_reg__,0
+ 1962 0908 00C0      		rjmp .L92
+ 930:stk500boot.c  **** 					boot_rww_enable();				// Re-enable the RWW section
+ 1963               		.loc 1 930 0
+ 1964 090a 81E1      		ldi r24,lo8(17)
+ 1965               	/* #APP */
+ 1966               	 ;  930 "stk500boot.c" 1
+ 1967 090c 8093 5700 		sts 87, r24
+ 1968 0910 E895      		spm
+ 1969               		
+ 1970               	 ;  0 "" 2
+ 1971               	/* #NOAPP */
+ 1972 0912 00C0      		rjmp .L93
+ 1973               	.LVL215:
+ 1974               	.L124:
+ 896:stk500boot.c  **** 				if ( msgBuffer[0] == CMD_PROGRAM_FLASH_ISP )
+ 1975               		.loc 1 896 0
+ 1976 0914 BC01      		movw r22,r24
+ 1977               	.LVL216:
+ 1978 0916 6901      		movw r12,r18
+ 1979 0918 7A01      		movw r14,r20
+ 890:stk500boot.c  **** 				unsigned char	*p	=	msgBuffer+10;
+ 1980               		.loc 1 890 0
+ 1981 091a FE01      		movw r30,r28
+ 1982 091c 3B96      		adiw r30,11
+ 1983               	.LVL217:
+ 1984               	.L87:
+ 931:stk500boot.c  **** 				}
+ 932:stk500boot.c  **** 				else
+ 933:stk500boot.c  **** 				{
+ 934:stk500boot.c  **** 					/* write EEPROM */
+ 935:stk500boot.c  **** 					do {
+ 936:stk500boot.c  **** 						EEARL	=	address;			// Setup EEPROM address
+ 1985               		.loc 1 936 0
+ 1986 091e C1BC      		out 0x21,r12
+ 937:stk500boot.c  **** 						EEARH	=	(address >> 8);
+ 1987               		.loc 1 937 0
+ 1988 0920 4D2C      		mov r4,r13
+ 1989 0922 5E2C      		mov r5,r14
+ 1990 0924 6F2C      		mov r6,r15
+ 1991 0926 7724      		clr r7
+ 1992 0928 42BC      		out 0x22,r4
+ 938:stk500boot.c  **** 						address++;						// Select next EEPROM byte
+ 1993               		.loc 1 938 0
+ 1994 092a 0FEF      		ldi r16,-1
+ 1995 092c C01A      		sub r12,r16
+ 1996 092e D00A      		sbc r13,r16
+ 1997 0930 E00A      		sbc r14,r16
+ 1998 0932 F00A      		sbc r15,r16
+ 1999               	.LVL218:
+ 939:stk500boot.c  **** 
+ 940:stk500boot.c  **** 						EEDR	=	*p++;				// get byte from buffer
+ 2000               		.loc 1 940 0
+ 2001 0934 A191      		ld r26,Z+
+ 2002               	.LVL219:
+ 2003 0936 A0BD      		out 0x20,r26
+ 2004               	.LVL220:
+ 941:stk500boot.c  **** 						EECR	|=	(1<<EEMWE);			// Write data into EEPROM
+ 2005               		.loc 1 941 0
+ 2006 0938 FA9A      		sbi 0x1f,2
+ 942:stk500boot.c  **** 						EECR	|=	(1<<EEWE);
+ 2007               		.loc 1 942 0
+ 2008 093a F99A      		sbi 0x1f,1
+ 2009               	.L94:
+ 943:stk500boot.c  **** 
+ 944:stk500boot.c  **** 						while (EECR & (1<<EEWE));	// Wait for write operation to finish
+ 2010               		.loc 1 944 0 discriminator 1
+ 2011 093c F999      		sbic 0x1f,1
+ 2012 093e 00C0      		rjmp .L94
+ 945:stk500boot.c  **** 						size--;						// Decrease number of bytes to write
+ 2013               		.loc 1 945 0
+ 2014 0940 6150      		subi r22,1
+ 2015 0942 7109      		sbc r23,__zero_reg__
+ 2016               	.LVL221:
+ 946:stk500boot.c  **** 					} while (size);					// Loop until all bytes written
+ 2017               		.loc 1 946 0
+ 2018 0944 01F4      		brne .L87
+ 467:stk500boot.c  **** int main(void)
+ 2019               		.loc 1 467 0
+ 2020 0946 6C01      		movw r12,r24
+ 2021               	.LVL222:
+ 2022 0948 61E0      		ldi r22,1
+ 2023 094a C61A      		sub r12,r22
+ 2024 094c D108      		sbc r13,__zero_reg__
+ 2025               	.LVL223:
+ 2026 094e E12C      		mov r14,__zero_reg__
+ 2027 0950 F12C      		mov r15,__zero_reg__
+ 2028 0952 7FEF      		ldi r23,-1
+ 2029 0954 C71A      		sub r12,r23
+ 2030 0956 D70A      		sbc r13,r23
+ 2031 0958 E70A      		sbc r14,r23
+ 2032 095a F70A      		sbc r15,r23
+ 2033 095c C20E      		add r12,r18
+ 2034 095e D31E      		adc r13,r19
+ 2035 0960 E41E      		adc r14,r20
+ 2036 0962 F51E      		adc r15,r21
+ 2037               	.LVL224:
+ 2038               	.L93:
+ 947:stk500boot.c  **** 				}
+ 948:stk500boot.c  **** 				msgLength	=	2;
+ 949:stk500boot.c  **** 				msgBuffer[1]	=	STATUS_CMD_OK;
+ 2039               		.loc 1 949 0
+ 2040 0964 1A82      		std Y+2,__zero_reg__
+ 2041               	.LBE99:
+ 950:stk500boot.c  **** 			}
+ 951:stk500boot.c  **** 			break;
+ 2042               		.loc 1 951 0
+ 2043 0966 A701      		movw r20,r14
+ 2044 0968 9601      		movw r18,r12
+ 2045 096a 00C0      		rjmp .L181
+ 2046               	.LVL225:
+ 2047               	.L57:
+ 2048               	.LBB100:
+ 952:stk500boot.c  **** 
+ 953:stk500boot.c  **** 			case CMD_READ_FLASH_ISP:
+ 954:stk500boot.c  **** 			case CMD_READ_EEPROM_ISP:
+ 955:stk500boot.c  **** 			{
+ 956:stk500boot.c  **** 				unsigned int	size	=	((msgBuffer[1])<<8) | msgBuffer[2];
+ 2049               		.loc 1 956 0
+ 2050 096c 8A81      		ldd r24,Y+2
+ 2051 096e CD5D      		subi r28,lo8(-291)
+ 2052 0970 DE4F      		sbci r29,hi8(-291)
+ 2053 0972 8883      		st Y,r24
+ 2054 0974 C352      		subi r28,lo8(291)
+ 2055 0976 D140      		sbci r29,hi8(291)
+ 2056 0978 CE5D      		subi r28,lo8(-290)
+ 2057 097a DE4F      		sbci r29,hi8(-290)
+ 2058 097c 1882      		st Y,__zero_reg__
+ 2059 097e C252      		subi r28,lo8(290)
+ 2060 0980 D140      		sbci r29,hi8(290)
+ 2061 0982 8B81      		ldd r24,Y+3
+ 2062 0984 CE5D      		subi r28,lo8(-290)
+ 2063 0986 DE4F      		sbci r29,hi8(-290)
+ 2064 0988 6881      		ld r22,Y
+ 2065 098a 7981      		ldd r23,Y+1
+ 2066 098c C252      		subi r28,lo8(290)
+ 2067 098e D140      		sbci r29,hi8(290)
+ 2068 0990 682B      		or r22,r24
+ 2069 0992 CB01      		movw r24,r22
+ 2070               	.LVL226:
+ 957:stk500boot.c  **** 				unsigned char	*p		=	msgBuffer+1;
+ 958:stk500boot.c  **** 				msgLength				=	size+3;
+ 2071               		.loc 1 958 0
+ 2072 0994 6D5F      		subi r22,-3
+ 2073 0996 7F4F      		sbci r23,-1
+ 2074               	.LVL227:
+ 959:stk500boot.c  **** 
+ 960:stk500boot.c  **** 				*p++	=	STATUS_CMD_OK;
+ 2075               		.loc 1 960 0
+ 2076 0998 1A82      		std Y+2,__zero_reg__
+ 2077               	.LVL228:
+ 961:stk500boot.c  **** 				if (msgBuffer[0] == CMD_READ_FLASH_ISP )
+ 2078               		.loc 1 961 0
+ 2079 099a E431      		cpi r30,lo8(20)
+ 2080 099c 01F4      		brne .L125
+ 2081 099e 7E01      		movw r14,r28
+ 2082 09a0 A4E0      		ldi r26,4
+ 2083 09a2 EA0E      		add r14,r26
+ 2084 09a4 F11C      		adc r15,__zero_reg__
+ 960:stk500boot.c  **** 				*p++	=	STATUS_CMD_OK;
+ 2085               		.loc 1 960 0
+ 2086 09a6 DE01      		movw r26,r28
+ 2087 09a8 1396      		adiw r26,3
+ 2088               	.L96:
+ 2089               	.LVL229:
+ 2090               	.LBB101:
+ 2091               	.LBB102:
+ 962:stk500boot.c  **** 				{
+ 963:stk500boot.c  **** 					unsigned int data;
+ 964:stk500boot.c  **** 
+ 965:stk500boot.c  **** 					// Read FLASH
+ 966:stk500boot.c  **** 					do {
+ 967:stk500boot.c  **** #if defined(RAMPZ)
+ 968:stk500boot.c  **** 						data	=	pgm_read_word_far(address);
+ 2092               		.loc 1 968 0 discriminator 1
+ 2093               	/* #APP */
+ 2094               	 ;  968 "stk500boot.c" 1
+ 2095 09aa 4BBF      		out 59, r20
+ 2096 09ac F901      		movw r30, r18
+ 2097 09ae C790      		elpm r12, Z+
+ 2098 09b0 D690      		elpm r13, Z
+ 2099               		
+ 2100               	 ;  0 "" 2
+ 2101               	/* #NOAPP */
+ 2102               	.LBE102:
+ 969:stk500boot.c  **** #else
+ 970:stk500boot.c  **** 						data	=	pgm_read_word_near(address);
+ 971:stk500boot.c  **** #endif
+ 972:stk500boot.c  **** 						*p++	=	(unsigned char)data;		//LSB
+ 2103               		.loc 1 972 0 discriminator 1
+ 2104 09b2 CC92      		st X,r12
+ 2105               	.LVL230:
+ 973:stk500boot.c  **** 						*p++	=	(unsigned char)(data >> 8);	//MSB
+ 2106               		.loc 1 973 0 discriminator 1
+ 2107 09b4 F701      		movw r30,r14
+ 2108 09b6 D082      		st Z,r13
+ 467:stk500boot.c  **** int main(void)
+ 2109               		.loc 1 467 0 discriminator 1
+ 2110 09b8 1296      		adiw r26,2
+ 2111               	.LVL231:
+ 974:stk500boot.c  **** 						address	+=	2;							// Select next word in memory
+ 2112               		.loc 1 974 0 discriminator 1
+ 2113 09ba 2E5F      		subi r18,-2
+ 2114 09bc 3F4F      		sbci r19,-1
+ 2115 09be 4F4F      		sbci r20,-1
+ 2116 09c0 5F4F      		sbci r21,-1
+ 2117               	.LVL232:
+ 975:stk500boot.c  **** 						size	-=	2;
+ 2118               		.loc 1 975 0 discriminator 1
+ 2119 09c2 0297      		sbiw r24,2
+ 2120               	.LVL233:
+ 2121 09c4 F2E0      		ldi r31,2
+ 2122 09c6 EF0E      		add r14,r31
+ 2123 09c8 F11C      		adc r15,__zero_reg__
+ 976:stk500boot.c  **** 					}while (size);
+ 2124               		.loc 1 976 0 discriminator 1
+ 2125 09ca 0097      		sbiw r24,0
+ 2126 09cc 01F4      		brne .L96
+ 2127 09ce 00C0      		rjmp .L97
+ 2128               	.LVL234:
+ 2129               	.L125:
+ 2130               	.LBE101:
+ 961:stk500boot.c  **** 				if (msgBuffer[0] == CMD_READ_FLASH_ISP )
+ 2131               		.loc 1 961 0
+ 2132 09d0 FC01      		movw r30,r24
+ 2133 09d2 6901      		movw r12,r18
+ 2134 09d4 7A01      		movw r14,r20
+ 960:stk500boot.c  **** 				*p++	=	STATUS_CMD_OK;
+ 2135               		.loc 1 960 0
+ 2136 09d6 DE01      		movw r26,r28
+ 2137 09d8 1396      		adiw r26,3
+ 2138               	.LVL235:
+ 2139               	.L95:
+ 977:stk500boot.c  **** 				}
+ 978:stk500boot.c  **** 				else
+ 979:stk500boot.c  **** 				{
+ 980:stk500boot.c  **** 					/* Read EEPROM */
+ 981:stk500boot.c  **** 					do {
+ 982:stk500boot.c  **** 						EEARL	=	address;			// Setup EEPROM address
+ 2140               		.loc 1 982 0 discriminator 1
+ 2141 09da C1BC      		out 0x21,r12
+ 983:stk500boot.c  **** 						EEARH	=	((address >> 8));
+ 2142               		.loc 1 983 0 discriminator 1
+ 2143 09dc 4D2C      		mov r4,r13
+ 2144 09de 5E2C      		mov r5,r14
+ 2145 09e0 6F2C      		mov r6,r15
+ 2146 09e2 7724      		clr r7
+ 2147 09e4 42BC      		out 0x22,r4
+ 984:stk500boot.c  **** 						address++;					// Select next EEPROM byte
+ 2148               		.loc 1 984 0 discriminator 1
+ 2149 09e6 0FEF      		ldi r16,-1
+ 2150 09e8 C01A      		sub r12,r16
+ 2151 09ea D00A      		sbc r13,r16
+ 2152 09ec E00A      		sbc r14,r16
+ 2153 09ee F00A      		sbc r15,r16
+ 2154               	.LVL236:
+ 985:stk500boot.c  **** 						EECR	|=	(1<<EERE);			// Read EEPROM
+ 2155               		.loc 1 985 0 discriminator 1
+ 2156 09f0 F89A      		sbi 0x1f,0
+ 986:stk500boot.c  **** 						*p++	=	EEDR;				// Send EEPROM data
+ 2157               		.loc 1 986 0 discriminator 1
+ 2158 09f2 00B5      		in r16,0x20
+ 2159 09f4 0D93      		st X+,r16
+ 2160               	.LVL237:
+ 987:stk500boot.c  **** 						size--;
+ 2161               		.loc 1 987 0 discriminator 1
+ 2162 09f6 3197      		sbiw r30,1
+ 2163               	.LVL238:
+ 988:stk500boot.c  **** 					} while (size);
+ 2164               		.loc 1 988 0 discriminator 1
+ 2165 09f8 01F4      		brne .L95
+ 467:stk500boot.c  **** int main(void)
+ 2166               		.loc 1 467 0
+ 2167 09fa 6C01      		movw r12,r24
+ 2168               	.LVL239:
+ 2169 09fc A1E0      		ldi r26,1
+ 2170 09fe CA1A      		sub r12,r26
+ 2171 0a00 D108      		sbc r13,__zero_reg__
+ 2172               	.LVL240:
+ 2173 0a02 E12C      		mov r14,__zero_reg__
+ 2174 0a04 F12C      		mov r15,__zero_reg__
+ 2175 0a06 EFEF      		ldi r30,-1
+ 2176 0a08 CE1A      		sub r12,r30
+ 2177 0a0a DE0A      		sbc r13,r30
+ 2178 0a0c EE0A      		sbc r14,r30
+ 2179 0a0e FE0A      		sbc r15,r30
+ 2180               	.LVL241:
+ 2181 0a10 2C0D      		add r18,r12
+ 2182 0a12 3D1D      		adc r19,r13
+ 2183 0a14 4E1D      		adc r20,r14
+ 2184 0a16 5F1D      		adc r21,r15
+ 2185 0a18 A3E0      		ldi r26,lo8(3)
+ 2186 0a1a B0E0      		ldi r27,0
+ 2187 0a1c AC0F      		add r26,r28
+ 2188 0a1e BD1F      		adc r27,r29
+ 2189 0a20 A80F      		add r26,r24
+ 2190 0a22 B91F      		adc r27,r25
+ 2191               	.L97:
+ 2192               	.LVL242:
+ 989:stk500boot.c  **** 				}
+ 990:stk500boot.c  **** 				*p++	=	STATUS_CMD_OK;
+ 2193               		.loc 1 990 0
+ 2194 0a24 1C92      		st X,__zero_reg__
+ 2195               	.LVL243:
+ 2196               	.LBE100:
+ 991:stk500boot.c  **** 			}
+ 992:stk500boot.c  **** 			break;
+ 2197               		.loc 1 992 0
+ 2198 0a26 00E0      		ldi r16,0
+ 2199 0a28 00C0      		rjmp .L80
+ 2200               	.LVL244:
+ 2201               	.L49:
+ 993:stk500boot.c  **** 
+ 994:stk500boot.c  **** 			default:
+ 995:stk500boot.c  **** 				msgLength		=	2;
+ 996:stk500boot.c  **** 				msgBuffer[1]	=	STATUS_CMD_FAILED;
+ 2202               		.loc 1 996 0
+ 2203 0a2a 80EC      		ldi r24,lo8(-64)
+ 2204 0a2c 8A83      		std Y+2,r24
+ 2205               	.LVL245:
+ 2206               	.L181:
+ 997:stk500boot.c  **** 				break;
+ 2207               		.loc 1 997 0
+ 2208 0a2e 00E0      		ldi r16,0
+ 2209               	.L180:
+ 995:stk500boot.c  **** 				msgLength		=	2;
+ 2210               		.loc 1 995 0
+ 2211 0a30 62E0      		ldi r22,lo8(2)
+ 2212 0a32 70E0      		ldi r23,0
+ 2213               	.LVL246:
+ 2214               	.L80:
+ 998:stk500boot.c  **** 			}
+ 999:stk500boot.c  **** 
+1000:stk500boot.c  **** 			/*
+1001:stk500boot.c  **** 			 * Now send answer message back
+1002:stk500boot.c  **** 			 */
+1003:stk500boot.c  **** 			sendchar(MESSAGE_START);
+ 2215               		.loc 1 1003 0
+ 2216 0a34 8BE1      		ldi r24,lo8(27)
+ 2217 0a36 C85D      		subi r28,lo8(-296)
+ 2218 0a38 DE4F      		sbci r29,hi8(-296)
+ 2219 0a3a 2883      		st Y,r18
+ 2220 0a3c C852      		subi r28,lo8(296)
+ 2221 0a3e D140      		sbci r29,hi8(296)
+ 2222 0a40 C75D      		subi r28,lo8(-297)
+ 2223 0a42 DE4F      		sbci r29,hi8(-297)
+ 2224 0a44 3883      		st Y,r19
+ 2225 0a46 C952      		subi r28,lo8(297)
+ 2226 0a48 D140      		sbci r29,hi8(297)
+ 2227 0a4a C65D      		subi r28,lo8(-298)
+ 2228 0a4c DE4F      		sbci r29,hi8(-298)
+ 2229 0a4e 4883      		st Y,r20
+ 2230 0a50 CA52      		subi r28,lo8(298)
+ 2231 0a52 D140      		sbci r29,hi8(298)
+ 2232 0a54 C55D      		subi r28,lo8(-299)
+ 2233 0a56 DE4F      		sbci r29,hi8(-299)
+ 2234 0a58 5883      		st Y,r21
+ 2235 0a5a CB52      		subi r28,lo8(299)
+ 2236 0a5c D140      		sbci r29,hi8(299)
+ 2237 0a5e CA5D      		subi r28,lo8(-294)
+ 2238 0a60 DE4F      		sbci r29,hi8(-294)
+ 2239 0a62 6883      		st Y,r22
+ 2240 0a64 C652      		subi r28,lo8(294)
+ 2241 0a66 D140      		sbci r29,hi8(294)
+ 2242 0a68 C95D      		subi r28,lo8(-295)
+ 2243 0a6a DE4F      		sbci r29,hi8(-295)
+ 2244 0a6c 7883      		st Y,r23
+ 2245 0a6e C752      		subi r28,lo8(295)
+ 2246 0a70 D140      		sbci r29,hi8(295)
+ 2247 0a72 0E94 0000 		call sendchar
+ 2248               	.LVL247:
+1004:stk500boot.c  **** 			checksum	=	MESSAGE_START^0;
+1005:stk500boot.c  **** 
+1006:stk500boot.c  **** 			sendchar(seqNum);
+ 2249               		.loc 1 1006 0
+ 2250 0a76 812F      		mov r24,r17
+ 2251 0a78 0E94 0000 		call sendchar
+ 2252               	.LVL248:
+1007:stk500boot.c  **** 			checksum	^=	seqNum;
+1008:stk500boot.c  **** 
+1009:stk500boot.c  **** 			c			=	((msgLength>>8)&0xFF);
+ 2253               		.loc 1 1009 0
+ 2254 0a7c C95D      		subi r28,lo8(-295)
+ 2255 0a7e DE4F      		sbci r29,hi8(-295)
+ 2256 0a80 7881      		ld r23,Y
+ 2257 0a82 C752      		subi r28,lo8(295)
+ 2258 0a84 D140      		sbci r29,hi8(295)
+ 2259 0a86 F72E      		mov r15,r23
+ 2260               	.LVL249:
+1010:stk500boot.c  **** 			sendchar(c);
+ 2261               		.loc 1 1010 0
+ 2262 0a88 872F      		mov r24,r23
+ 2263 0a8a 0E94 0000 		call sendchar
+ 2264               	.LVL250:
+1011:stk500boot.c  **** 			checksum	^=	c;
+1012:stk500boot.c  **** 
+1013:stk500boot.c  **** 			c			=	msgLength&0x00FF;
+ 2265               		.loc 1 1013 0
+ 2266 0a8e CA5D      		subi r28,lo8(-294)
+ 2267 0a90 DE4F      		sbci r29,hi8(-294)
+ 2268 0a92 6881      		ld r22,Y
+ 2269 0a94 C652      		subi r28,lo8(294)
+ 2270 0a96 D140      		sbci r29,hi8(294)
+ 2271 0a98 E62E      		mov r14,r22
+ 2272               	.LVL251:
+1014:stk500boot.c  **** 			sendchar(c);
+ 2273               		.loc 1 1014 0
+ 2274 0a9a 862F      		mov r24,r22
+ 2275 0a9c 0E94 0000 		call sendchar
+ 2276               	.LVL252:
+1015:stk500boot.c  **** 			checksum ^= c;
+1016:stk500boot.c  **** 
+1017:stk500boot.c  **** 			sendchar(TOKEN);
+ 2277               		.loc 1 1017 0
+ 2278 0aa0 8EE0      		ldi r24,lo8(14)
+ 2279 0aa2 0E94 0000 		call sendchar
+ 2280               	.LVL253:
+1011:stk500boot.c  **** 			checksum	^=	c;
+ 2281               		.loc 1 1011 0
+ 2282 0aa6 95E1      		ldi r25,lo8(21)
+ 2283 0aa8 792E      		mov r7,r25
+ 2284 0aaa 7126      		eor r7,r17
+1015:stk500boot.c  **** 			checksum ^= c;
+ 2285               		.loc 1 1015 0
+ 2286 0aac 7E24      		eor r7,r14
+1018:stk500boot.c  **** 			checksum ^= TOKEN;
+ 2287               		.loc 1 1018 0
+ 2288 0aae 7F24      		eor r7,r15
+ 2289               	.LVL254:
+ 467:stk500boot.c  **** int main(void)
+ 2290               		.loc 1 467 0
+ 2291 0ab0 CA5D      		subi r28,lo8(-294)
+ 2292 0ab2 DE4F      		sbci r29,hi8(-294)
+ 2293 0ab4 6881      		ld r22,Y
+ 2294 0ab6 C652      		subi r28,lo8(294)
+ 2295 0ab8 D140      		sbci r29,hi8(294)
+ 2296 0aba C95D      		subi r28,lo8(-295)
+ 2297 0abc DE4F      		sbci r29,hi8(-295)
+ 2298 0abe 7881      		ld r23,Y
+ 2299 0ac0 C752      		subi r28,lo8(295)
+ 2300 0ac2 D140      		sbci r29,hi8(295)
+ 2301 0ac4 CC24      		clr r12
+ 2302 0ac6 C394      		inc r12
+ 2303 0ac8 D12C      		mov r13,__zero_reg__
+ 2304 0aca CC0E      		add r12,r28
+ 2305 0acc DD1E      		adc r13,r29
+ 2306 0ace C60E      		add r12,r22
+ 2307 0ad0 D71E      		adc r13,r23
+1019:stk500boot.c  **** 
+1020:stk500boot.c  **** 			p	=	msgBuffer;
+ 2308               		.loc 1 1020 0
+ 2309 0ad2 EE24      		clr r14
+ 2310 0ad4 E394      		inc r14
+ 2311 0ad6 F12C      		mov r15,__zero_reg__
+ 2312               	.LVL255:
+ 2313 0ad8 EC0E      		add r14,r28
+ 2314 0ada FD1E      		adc r15,r29
+1021:stk500boot.c  **** 			while ( msgLength )
+ 2315               		.loc 1 1021 0
+ 2316 0adc C85D      		subi r28,lo8(-296)
+ 2317 0ade DE4F      		sbci r29,hi8(-296)
+ 2318 0ae0 2881      		ld r18,Y
+ 2319 0ae2 C852      		subi r28,lo8(296)
+ 2320 0ae4 D140      		sbci r29,hi8(296)
+ 2321 0ae6 C75D      		subi r28,lo8(-297)
+ 2322 0ae8 DE4F      		sbci r29,hi8(-297)
+ 2323 0aea 3881      		ld r19,Y
+ 2324 0aec C952      		subi r28,lo8(297)
+ 2325 0aee D140      		sbci r29,hi8(297)
+ 2326 0af0 C65D      		subi r28,lo8(-298)
+ 2327 0af2 DE4F      		sbci r29,hi8(-298)
+ 2328 0af4 4881      		ld r20,Y
+ 2329 0af6 CA52      		subi r28,lo8(298)
+ 2330 0af8 D140      		sbci r29,hi8(298)
+ 2331 0afa C55D      		subi r28,lo8(-299)
+ 2332 0afc DE4F      		sbci r29,hi8(-299)
+ 2333 0afe 5881      		ld r21,Y
+ 2334 0b00 CB52      		subi r28,lo8(299)
+ 2335 0b02 D140      		sbci r29,hi8(299)
+ 2336 0b04 00C0      		rjmp .L98
+ 2337               	.LVL256:
+ 2338               	.L99:
+1022:stk500boot.c  **** 			{
+1023:stk500boot.c  **** 				c	=	*p++;
+ 2339               		.loc 1 1023 0
+ 2340 0b06 F701      		movw r30,r14
+ 2341 0b08 6190      		ld r6,Z+
+ 2342 0b0a 7F01      		movw r14,r30
+ 2343               	.LVL257:
+1024:stk500boot.c  **** 				sendchar(c);
+ 2344               		.loc 1 1024 0
+ 2345 0b0c 862D      		mov r24,r6
+ 2346 0b0e C85D      		subi r28,lo8(-296)
+ 2347 0b10 DE4F      		sbci r29,hi8(-296)
+ 2348 0b12 2883      		st Y,r18
+ 2349 0b14 C852      		subi r28,lo8(296)
+ 2350 0b16 D140      		sbci r29,hi8(296)
+ 2351 0b18 C75D      		subi r28,lo8(-297)
+ 2352 0b1a DE4F      		sbci r29,hi8(-297)
+ 2353 0b1c 3883      		st Y,r19
+ 2354 0b1e C952      		subi r28,lo8(297)
+ 2355 0b20 D140      		sbci r29,hi8(297)
+ 2356 0b22 C65D      		subi r28,lo8(-298)
+ 2357 0b24 DE4F      		sbci r29,hi8(-298)
+ 2358 0b26 4883      		st Y,r20
+ 2359 0b28 CA52      		subi r28,lo8(298)
+ 2360 0b2a D140      		sbci r29,hi8(298)
+ 2361 0b2c C55D      		subi r28,lo8(-299)
+ 2362 0b2e DE4F      		sbci r29,hi8(-299)
+ 2363 0b30 5883      		st Y,r21
+ 2364 0b32 CB52      		subi r28,lo8(299)
+ 2365 0b34 D140      		sbci r29,hi8(299)
+ 2366 0b36 0E94 0000 		call sendchar
+ 2367               	.LVL258:
+1025:stk500boot.c  **** 				checksum ^=c;
+ 2368               		.loc 1 1025 0
+ 2369 0b3a 7624      		eor r7,r6
+ 2370               	.LVL259:
+ 2371 0b3c C55D      		subi r28,lo8(-299)
+ 2372 0b3e DE4F      		sbci r29,hi8(-299)
+ 2373 0b40 5881      		ld r21,Y
+ 2374 0b42 CB52      		subi r28,lo8(299)
+ 2375 0b44 D140      		sbci r29,hi8(299)
+ 2376 0b46 C65D      		subi r28,lo8(-298)
+ 2377 0b48 DE4F      		sbci r29,hi8(-298)
+ 2378 0b4a 4881      		ld r20,Y
+ 2379 0b4c CA52      		subi r28,lo8(298)
+ 2380 0b4e D140      		sbci r29,hi8(298)
+ 2381 0b50 C75D      		subi r28,lo8(-297)
+ 2382 0b52 DE4F      		sbci r29,hi8(-297)
+ 2383 0b54 3881      		ld r19,Y
+ 2384 0b56 C952      		subi r28,lo8(297)
+ 2385 0b58 D140      		sbci r29,hi8(297)
+ 2386 0b5a C85D      		subi r28,lo8(-296)
+ 2387 0b5c DE4F      		sbci r29,hi8(-296)
+ 2388 0b5e 2881      		ld r18,Y
+ 2389 0b60 C852      		subi r28,lo8(296)
+ 2390 0b62 D140      		sbci r29,hi8(296)
+ 2391               	.LVL260:
+ 2392               	.L98:
+1021:stk500boot.c  **** 			while ( msgLength )
+ 2393               		.loc 1 1021 0 discriminator 1
+ 2394 0b64 EC14      		cp r14,r12
+ 2395 0b66 FD04      		cpc r15,r13
+ 2396 0b68 01F4      		brne .L99
+1026:stk500boot.c  **** 				msgLength--;
+1027:stk500boot.c  **** 			}
+1028:stk500boot.c  **** 			sendchar(checksum);
+ 2397               		.loc 1 1028 0
+ 2398 0b6a 872D      		mov r24,r7
+ 2399 0b6c C85D      		subi r28,lo8(-296)
+ 2400 0b6e DE4F      		sbci r29,hi8(-296)
+ 2401 0b70 2883      		st Y,r18
+ 2402 0b72 C852      		subi r28,lo8(296)
+ 2403 0b74 D140      		sbci r29,hi8(296)
+ 2404 0b76 C75D      		subi r28,lo8(-297)
+ 2405 0b78 DE4F      		sbci r29,hi8(-297)
+ 2406 0b7a 3883      		st Y,r19
+ 2407 0b7c C952      		subi r28,lo8(297)
+ 2408 0b7e D140      		sbci r29,hi8(297)
+ 2409 0b80 C65D      		subi r28,lo8(-298)
+ 2410 0b82 DE4F      		sbci r29,hi8(-298)
+ 2411 0b84 4883      		st Y,r20
+ 2412 0b86 CA52      		subi r28,lo8(298)
+ 2413 0b88 D140      		sbci r29,hi8(298)
+ 2414 0b8a C55D      		subi r28,lo8(-299)
+ 2415 0b8c DE4F      		sbci r29,hi8(-299)
+ 2416 0b8e 5883      		st Y,r21
+ 2417 0b90 CB52      		subi r28,lo8(299)
+ 2418 0b92 D140      		sbci r29,hi8(299)
+ 2419 0b94 0E94 0000 		call sendchar
+ 2420               	.LVL261:
+1029:stk500boot.c  **** 			seqNum++;
+ 2421               		.loc 1 1029 0
+ 2422 0b98 1F5F      		subi r17,lo8(-(1))
+ 2423               	.LVL262:
+ 2424 0b9a A0E0      		ldi r26,0
+ 2425 0b9c B0E0      		ldi r27,0
+ 588:stk500boot.c  **** 		while (!isLeave)
+ 2426               		.loc 1 588 0
+ 2427 0b9e C85D      		subi r28,lo8(-296)
+ 2428 0ba0 DE4F      		sbci r29,hi8(-296)
+ 2429 0ba2 2881      		ld r18,Y
+ 2430 0ba4 C852      		subi r28,lo8(296)
+ 2431 0ba6 D140      		sbci r29,hi8(296)
+ 2432 0ba8 C75D      		subi r28,lo8(-297)
+ 2433 0baa DE4F      		sbci r29,hi8(-297)
+ 2434 0bac 3881      		ld r19,Y
+ 2435 0bae C952      		subi r28,lo8(297)
+ 2436 0bb0 D140      		sbci r29,hi8(297)
+ 2437 0bb2 C65D      		subi r28,lo8(-298)
+ 2438 0bb4 DE4F      		sbci r29,hi8(-298)
+ 2439 0bb6 4881      		ld r20,Y
+ 2440 0bb8 CA52      		subi r28,lo8(298)
+ 2441 0bba D140      		sbci r29,hi8(298)
+ 2442 0bbc C55D      		subi r28,lo8(-299)
+ 2443 0bbe DE4F      		sbci r29,hi8(-299)
+ 2444 0bc0 5881      		ld r21,Y
+ 2445 0bc2 CB52      		subi r28,lo8(299)
+ 2446 0bc4 D140      		sbci r29,hi8(299)
+ 2447 0bc6 0023      		tst r16
+ 2448 0bc8 01F0      		breq .L32
+ 2449 0bca 00C0      		rjmp .L33
+ 2450               	.LVL263:
+ 2451               	.L102:
+ 585:stk500boot.c  **** 	if (boot_state==1)
+ 2452               		.loc 1 585 0
+ 2453 0bcc 12E0      		ldi r17,lo8(2)
+ 2454 0bce 212C      		mov r2,__zero_reg__
+ 2455 0bd0 312C      		mov r3,__zero_reg__
+ 2456 0bd2 812C      		mov r8,__zero_reg__
+ 2457 0bd4 912C      		mov r9,__zero_reg__
+ 2458 0bd6 5401      		movw r10,r8
+ 2459 0bd8 20E0      		ldi r18,0
+ 2460 0bda 30E0      		ldi r19,0
+ 2461 0bdc A901      		movw r20,r18
+ 2462               	.LBB103:
+ 2463               	.LBB80:
+ 2464               	.LBB78:
+ 2465               	.LBB77:
+ 446:stk500boot.c  **** 			data	=	pgm_read_word_far(0);	//*	get the first word of the user program
+ 2466               		.loc 1 446 0
+ 2467               	/* #APP */
+ 2468               	 ;  446 "stk500boot.c" 1
+ 2469 0bde ABBE      		out 59, r10
+ 2470 0be0 F401      		movw r30, r8
+ 2471 0be2 6791      		elpm r22, Z+
+ 2472 0be4 7691      		elpm r23, Z
+ 2473               		
+ 2474               	 ;  0 "" 2
+ 2475               	/* #NOAPP */
+ 2476 0be6 CC5D      		subi r28,lo8(-292)
+ 2477 0be8 DE4F      		sbci r29,hi8(-292)
+ 2478 0bea 7983      		std Y+1,r23
+ 2479 0bec 6883      		st Y,r22
+ 2480 0bee C452      		subi r28,lo8(292)
+ 2481 0bf0 D140      		sbci r29,hi8(292)
+ 2482               	.LVL264:
+ 2483               	.L32:
+ 2484               	.LBE77:
+ 2485               	.LBE78:
+ 2486               	.LBE80:
+ 2487               	.LBE103:
+ 494:stk500boot.c  **** 	boot_timer	=	0;
+ 2488               		.loc 1 494 0 discriminator 1
+ 2489 0bf2 60E0      		ldi r22,0
+ 2490 0bf4 70E0      		ldi r23,0
+ 2491 0bf6 80E0      		ldi r24,0
+ 2492 0bf8 00C0      		rjmp .L100
+ 2493               	.LVL265:
+ 2494               	.L33:
+1030:stk500boot.c  **** 
+1031:stk500boot.c  **** 
+1032:stk500boot.c  **** 		}
+1033:stk500boot.c  **** 	}
+1034:stk500boot.c  **** 
+1035:stk500boot.c  **** 
+1036:stk500boot.c  **** 
+1037:stk500boot.c  **** #ifdef _DEBUG_SERIAL_
+1038:stk500boot.c  **** 	sendchar('j');
+1039:stk500boot.c  **** 	//	sendchar('u');
+1040:stk500boot.c  **** 	//	sendchar('m');
+1041:stk500boot.c  **** 	//	sendchar('p');
+1042:stk500boot.c  **** 	//	sendchar(' ');
+1043:stk500boot.c  **** 	//	sendchar('u');
+1044:stk500boot.c  **** 	//	sendchar('s');
+1045:stk500boot.c  **** 	//	sendchar('r');
+1046:stk500boot.c  **** 	sendchar(0x0d);
+1047:stk500boot.c  **** 	sendchar(0x0a);
+1048:stk500boot.c  **** 
+1049:stk500boot.c  **** 	delay_ms(100);
+1050:stk500boot.c  **** #endif
+1051:stk500boot.c  **** 
+1052:stk500boot.c  **** 
+1053:stk500boot.c  **** 
+1054:stk500boot.c  **** 	asm volatile ("nop");			// wait until port has changed
+ 2495               		.loc 1 1054 0
+ 2496               	/* #APP */
+ 2497               	 ;  1054 "stk500boot.c" 1
+ 2498 0bfa 0000      		nop
+ 2499               	 ;  0 "" 2
+1055:stk500boot.c  **** 
+1056:stk500boot.c  **** 	/*
+1057:stk500boot.c  **** 	 * Now leave bootloader
+1058:stk500boot.c  **** 	 */
+1059:stk500boot.c  **** 
+1060:stk500boot.c  **** 	UART_STATUS_REG	&=	0xfd;
+ 2500               		.loc 1 1060 0
+ 2501               	/* #NOAPP */
+ 2502 0bfc 8091 C000 		lds r24,192
+ 2503 0c00 8D7F      		andi r24,lo8(-3)
+ 2504 0c02 8093 C000 		sts 192,r24
+1061:stk500boot.c  **** 	boot_rww_enable();				// enable application section
+ 2505               		.loc 1 1061 0
+ 2506 0c06 81E1      		ldi r24,lo8(17)
+ 2507               	/* #APP */
+ 2508               	 ;  1061 "stk500boot.c" 1
+ 2509 0c08 8093 5700 		sts 87, r24
+ 2510 0c0c E895      		spm
+ 2511               		
+ 2512               	 ;  0 "" 2
+1062:stk500boot.c  **** 
+1063:stk500boot.c  **** 
+1064:stk500boot.c  **** 	asm volatile(
+ 2513               		.loc 1 1064 0
+ 2514               	 ;  1064 "stk500boot.c" 1
+ 2515 0c0e EE27      		clr	r30		
+ 2516 0c10 FF27      		clr	r31		
+ 2517 0c12 0994      		ijmp	
+ 2518               		
+ 2519               	 ;  0 "" 2
+ 2520               	/* #NOAPP */
+ 2521               	.L101:
+ 2522 0c14 00C0      		rjmp .L101
+ 2523               	.LVL266:
+ 2524               	.L105:
+ 613:stk500boot.c  **** 						checksum		=	MESSAGE_START^0;
+ 2525               		.loc 1 613 0
+ 2526 0c16 8BE1      		ldi r24,lo8(27)
+ 2527 0c18 782E      		mov r7,r24
+ 612:stk500boot.c  **** 						msgParseState	=	ST_GET_SEQ_NUM;
+ 2528               		.loc 1 612 0
+ 2529 0c1a 81E0      		ldi r24,lo8(1)
+ 2530 0c1c 00C0      		rjmp .L66
+ 2531               	.LVL267:
+ 2532               	.L108:
+ 660:stk500boot.c  **** 						msgParseState	=	ST_GET_CHECK;
+ 2533               		.loc 1 660 0
+ 2534 0c1e 86E0      		ldi r24,lo8(6)
+ 2535 0c20 00C0      		rjmp .L66
+ 2536               	.LVL268:
+ 2537               	.L109:
+ 671:stk500boot.c  **** 						msgParseState	=	ST_START;
+ 2538               		.loc 1 671 0
+ 2539 0c22 80E0      		ldi r24,0
+ 2540               	.LVL269:
+ 2541 0c24 00C0      		rjmp .L66
+ 2542               	.LFE19:
+ 2544               		.section	.rodata
+ 2547               	CSWTCH.21:
+ 2548 0000 0F        		.byte	15
+ 2549 0001 02        		.byte	2
+ 2550 0002 0A        		.byte	10
+ 2553               	speedoino_data:
+ 2554 0003 F8        		.byte	-8
+ 2555 0004 80        		.byte	-128
+ 2556 0005 E0        		.byte	-32
+ 2557 0006 80        		.byte	-128
+ 2558 0007 80        		.byte	-128
+ 2559 0008 F8        		.byte	-8
+ 2560 0009 F0        		.byte	-16
+ 2561 000a 88        		.byte	-120
+ 2562 000b 88        		.byte	-120
+ 2563 000c 88        		.byte	-120
+ 2564 000d 88        		.byte	-120
+ 2565 000e F0        		.byte	-16
+ 2566 000f F8        		.byte	-8
+ 2567 0010 20        		.byte	32
+ 2568 0011 20        		.byte	32
+ 2569 0012 20        		.byte	32
+ 2570 0013 20        		.byte	32
+ 2571 0014 F8        		.byte	-8
+ 2572 0015 88        		.byte	-120
+ 2573 0016 C8        		.byte	-56
+ 2574 0017 A8        		.byte	-88
+ 2575 0018 98        		.byte	-104
+ 2576 0019 88        		.byte	-120
+ 2577 001a 88        		.byte	-120
+ 2578 001b F8        		.byte	-8
+ 2579 001c 88        		.byte	-120
+ 2580 001d 88        		.byte	-120
+ 2581 001e 88        		.byte	-120
+ 2582 001f 88        		.byte	-120
+ 2583 0020 F8        		.byte	-8
+ 2584 0021 F8        		.byte	-8
+ 2585 0022 80        		.byte	-128
+ 2586 0023 F8        		.byte	-8
+ 2587 0024 08        		.byte	8
+ 2588 0025 08        		.byte	8
+ 2589 0026 F8        		.byte	-8
+ 2590 0027 F0        		.byte	-16
+ 2591 0028 88        		.byte	-120
+ 2592 0029 F8        		.byte	-8
+ 2593 002a 80        		.byte	-128
+ 2594 002b 80        		.byte	-128
+ 2595 002c 80        		.byte	-128
+ 2710               	.Letext0:
+ 2711               		.file 3 "/usr/lib/gcc/avr/4.7.0/../../../avr/include/stdint.h"
+ 2712               		.file 4 "logo.h"
+DEFINED SYMBOLS
+                            *ABS*:0000000000000000 stk500boot.c
+     /tmp/cc1FqHL9.s:2      *ABS*:000000000000003e __SP_H__
+     /tmp/cc1FqHL9.s:3      *ABS*:000000000000003d __SP_L__
+     /tmp/cc1FqHL9.s:4      *ABS*:000000000000003f __SREG__
+     /tmp/cc1FqHL9.s:5      *ABS*:000000000000003b __RAMPZ__
+     /tmp/cc1FqHL9.s:6      *ABS*:0000000000000000 __tmp_reg__
+     /tmp/cc1FqHL9.s:7      *ABS*:0000000000000001 __zero_reg__
+     /tmp/cc1FqHL9.s:11     .text:0000000000000000 sendchar
+     /tmp/cc1FqHL9.s:36     .text:0000000000000018 senden_spi
+     /tmp/cc1FqHL9.s:80     .text:000000000000003a send_command
+     /tmp/cc1FqHL9.s:99     .text:0000000000000044 send_char
+     /tmp/cc1FqHL9.s:116    .text.unlikely:0000000000000000 draw_line.constprop.0
+     /tmp/cc1FqHL9.s:176    .init9:0000000000000000 __jumpMain
+     /tmp/cc1FqHL9.s:186    *ABS*:00000000000021ff __stack
+     /tmp/cc1FqHL9.s:267    .text.startup:0000000000000000 main
+     /tmp/cc1FqHL9.s:224    .text:000000000000004a delay_ms
+     /tmp/cc1FqHL9.s:2553   .rodata:0000000000000003 speedoino_data
+     /tmp/cc1FqHL9.s:2547   .rodata:0000000000000000 CSWTCH.21
+
+UNDEFINED SYMBOLS
+__muluhisi3
+__udivmodsi4
+__do_copy_data

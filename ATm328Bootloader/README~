@@ -1,0 +1,4 @@
+make
+
+avrdude -pm328p -cavrisp2 -Pusb -V -Uflash:w:stk500boot.hex:a -v -Ulfuse:w:0xff:m -Uhfuse:w:0xd2:m -Uefuse:w:0x6:m
+

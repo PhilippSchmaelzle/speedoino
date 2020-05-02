@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/connectLayout"
+    android:layout_width="fill_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/road"
+    android:orientation="vertical" >
+
+    <LinearLayout
+        android:id="@+id/TextLayout"
+        android:layout_width="wrap_content"
+        android:layout_height="10dp"
+        android:orientation="horizontal" />
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="fill" >
+
+        <Button
+            android:id="@+id/button_up"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_centerHorizontal="true" />
+
+        <Button
+            android:id="@+id/button_left"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_below="@id/button_up"
+            android:layout_toLeftOf="@id/button_up" />
+
+        <Button
+            android:id="@+id/button_right"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_below="@id/button_up"
+            android:layout_toRightOf="@id/button_up" />
+
+        <Button
+            android:id="@+id/button_down"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_below="@id/button_right"
+            android:layout_toLeftOf="@id/button_right" />
+    </RelativeLayout>
+
+    <LinearLayout
+        android:id="@+id/TextLayout"
+        android:layout_width="wrap_content"
+        android:layout_height="80dp"
+        android:orientation="horizontal" />
+
+    <LinearLayout
+        android:id="@+id/TextLayoutasd"
+        android:layout_width="fill_parent"
+        android:layout_height="40dp"
+        android:orientation="horizontal" >
+
+        <TextView
+            android:id="@+id/status_cap"
+            android:layout_width="170dp"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
+            android:shadowColor="#555555"
+            android:shadowDx="1.0"
+            android:shadowDy="1.0"
+            android:shadowRadius="3.0"
+            android:text="@string/status_cap"
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:textColor="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/status_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="5dp"
+            android:shadowColor="#555555"
+            android:shadowDx="1.0"
+            android:shadowDy="1.0"
+            android:shadowRadius="3.0"
+            android:text="@string/status_value"
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/TextLayout"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal" >
+
+        <TextView
+            android:id="@+id/version_cap"
+            android:layout_width="170dp"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
+            android:shadowColor="#555555"
+            android:shadowDx="1.0"
+            android:shadowDy="1.0"
+            android:shadowRadius="3.0"
+            android:text="@string/version_cap"
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:textColor="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/version_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:shadowColor="#555555"
+            android:shadowDx="1.0"
+            android:shadowDy="1.0"
+            android:shadowRadius="3.0"
+            android:text="@string/version_value"
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/TextLayout"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal" >
+
+        <TextView
+            android:id="@+id/log_cap"
+            android:layout_width="170dp"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
+            android:shadowColor="#555555"
+            android:shadowDx="1.0"
+            android:shadowDy="1.0"
+            android:shadowRadius="3.0"
+            android:text="@string/log_cap"
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:textColor="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/log_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:shadowColor="#555555"
+            android:shadowDx="1.0"
+            android:shadowDy="1.0"
+            android:shadowRadius="3.0"
+            android:text="@string/log_value"
+            android:textAppearance="?android:attr/textAppearanceSmall"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
+
+</LinearLayout>
